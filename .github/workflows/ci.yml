@@ -1,0 +1,40 @@
+name: Helm CI
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  package-platform-chart:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Helm
+        uses: azure/setup-helm@v4
+
+      - name: Lint chart
+        run: |
+          helm lint charts/platform
+
+      - name: Package chart
+        run: |
+          helm package charts/platform --destination dist
+
+      - name: JFrog OIDC login
+        uses: jfrog/setup-jfrog-cli@v4
+      - name: Configure JFrog URL
+        run: |
+          jf c add --interactive=false --url "${{ vars.JFROG_URL }}" --access-token ""
+
+      - name: Upload chart (placeholder)
+        run: |
+          echo "(placeholder) jf rt u \"dist/platform-*.tgz\" ${ { vars.PROJECT_KEY } }-helm-helm-internal-local/"
+
+
