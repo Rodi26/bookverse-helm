@@ -1,0 +1,20 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: checkout
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: checkout
+  template:
+    metadata:
+      labels:
+        app: checkout
+    spec:
+      containers:
+        - name: checkout
+          image: {{ default "" .Values.checkout.repository }}:{{ default "latest" .Values.checkout.tag }}
+          ports:
+            - containerPort: {{ .Values.checkout.port }}
+

@@ -1,0 +1,29 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: platform-web
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: platform-web
+  template:
+    metadata:
+      labels:
+        app: platform-web
+    spec:
+      containers:
+        - name: web
+          image: {{ default "" .Values.web.repository }}:{{ default "latest" .Values.web.tag }}
+          ports:
+            - containerPort: {{ .Values.web.port }}
+          env:
+            - name: BOOKVERSE_ENV
+              value: {{ quote .Values.web.env.BOOKVERSE_ENV }}
+            - name: INVENTORY_BASE_URL
+              value: {{ quote .Values.web.env.INVENTORY_BASE_URL }}
+            - name: RECOMMENDATIONS_BASE_URL
+              value: {{ quote .Values.web.env.RECOMMENDATIONS_BASE_URL }}
+            - name: CHECKOUT_BASE_URL
+              value: {{ quote .Values.web.env.CHECKOUT_BASE_URL }}
+

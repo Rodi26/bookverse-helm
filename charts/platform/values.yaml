@@ -1,0 +1,28 @@
+global:
+  imageRegistry: ""
+
+web:
+  repository: ""
+  tag: ""
+  port: 8080
+  env:
+    BOOKVERSE_ENV: "DEV"
+    INVENTORY_BASE_URL: ""
+    RECOMMENDATIONS_BASE_URL: ""
+    CHECKOUT_BASE_URL: ""
+
+inventory:
+  repository: ""
+  tag: ""
+  port: 8000
+
+recommendations:
+  repository: ""
+  tag: ""
+  port: 8000
+
+checkout:
+  repository: ""
+  tag: ""
+  port: 8000
+

@@ -1,0 +1,20 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: inventory
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: inventory
+  template:
+    metadata:
+      labels:
+        app: inventory
+    spec:
+      containers:
+        - name: inventory
+          image: {{ default "" .Values.inventory.repository }}:{{ default "latest" .Values.inventory.tag }}
+          ports:
+            - containerPort: {{ .Values.inventory.port }}
+
