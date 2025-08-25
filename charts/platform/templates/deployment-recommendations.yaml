@@ -17,4 +17,16 @@ spec:
           image: {{ default "" .Values.recommendations.repository }}:{{ default "latest" .Values.recommendations.tag }}
           ports:
             - containerPort: {{ .Values.recommendations.port }}
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: {{ .Values.recommendations.port }}
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: {{ .Values.recommendations.port }}
+            initialDelaySeconds: 15
+            periodSeconds: 20
 

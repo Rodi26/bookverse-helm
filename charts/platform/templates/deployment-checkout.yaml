@@ -17,4 +17,16 @@ spec:
           image: {{ default "" .Values.checkout.repository }}:{{ default "latest" .Values.checkout.tag }}
           ports:
             - containerPort: {{ .Values.checkout.port }}
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: {{ .Values.checkout.port }}
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: {{ .Values.checkout.port }}
+            initialDelaySeconds: 15
+            periodSeconds: 20
 

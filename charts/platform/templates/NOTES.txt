@@ -1,0 +1,13 @@
+Thank you for installing the BookVerse platform chart.
+
+To access the web UI:
+  kubectl get svc platform-web -n <namespace>
+  kubectl port-forward svc/platform-web 8080:80 -n <namespace>
+  Then open http://localhost:8080
+
+This chart deploys:
+  - Web UI (platform-web)
+  - Inventory, Recommendations, Checkout services
+
+Values files map image registry/repository/tags per environment.
+

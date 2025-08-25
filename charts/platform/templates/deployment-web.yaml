@@ -17,6 +17,18 @@ spec:
           image: {{ default "" .Values.web.repository }}:{{ default "latest" .Values.web.tag }}
           ports:
             - containerPort: {{ .Values.web.port }}
+          readinessProbe:
+            httpGet:
+              path: /
+              port: {{ .Values.web.port }}
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /
+              port: {{ .Values.web.port }}
+            initialDelaySeconds: 15
+            periodSeconds: 20
           env:
             - name: BOOKVERSE_ENV
               value: {{ quote .Values.web.env.BOOKVERSE_ENV }}

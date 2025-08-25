@@ -17,4 +17,16 @@ spec:
           image: {{ default "" .Values.inventory.repository }}:{{ default "latest" .Values.inventory.tag }}
           ports:
             - containerPort: {{ .Values.inventory.port }}
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: {{ .Values.inventory.port }}
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: {{ .Values.inventory.port }}
+            initialDelaySeconds: 15
+            periodSeconds: 20
 
