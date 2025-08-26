@@ -25,11 +25,6 @@ jobs:
         run: |
           jf c add --interactive=false --url "${{ vars.JFROG_URL }}" --access-token ""
 
-      - name: Start Build Info Collection
-        run: |
-          echo "🔄 Starting build info collection for Helm Charts CI"
-          jf rt build-start
-
       - name: Setup Helm
         uses: azure/setup-helm@v4
 
