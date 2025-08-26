@@ -40,19 +40,4 @@ jobs:
         run: |
           echo "(placeholder) jf rt u \"dist/platform-*.tgz\" ${{ vars.PROJECT_KEY }}-helm-helm-internal-local/"
 
-      - name: Publish Build Info
-        if: always()
-        run: |
-          echo "📊 Publishing build info for Helm Charts CI"
-          jf rt build-publish
-          echo "✅ Build info published successfully"
-
-      - name: Build Info Summary
-        if: always()
-        run: |
-          echo "📋 Helm Charts CI Complete"
-          echo "   Build Name: ${JFROG_CLI_BUILD_NAME:-'Helm-CI'}"
-          echo "   Build Number: ${JFROG_CLI_BUILD_NUMBER:-${{ github.run_number }}}"
-          echo "   All CI actions captured in JFrog build info"
-
 
