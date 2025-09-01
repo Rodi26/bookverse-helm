@@ -20,6 +20,39 @@ recommendations:
   repository: ""
   tag: ""
   port: 8000
+  env:
+    INVENTORY_BASE_URL: "http://inventory"
+  worker:
+    enabled: true
+    repository: ""
+    tag: ""
+    refreshSeconds: 60
+  config:
+    enabled: true
+    mountPath: "/app/config"
+    data:
+      recommendations-settings.yaml: |
+        weights:
+          genre: 1.0
+          author: 0.25
+          popularity: 0.10
+        limits:
+          default: 10
+          max: 50
+        features:
+          filter_out_of_stock: true
+          enable_cache: false
+          ttl_seconds: 60
+  resources:
+    enabled: true
+    mountPath: "/app/resources"
+    data:
+      stopwords.txt: |
+        the
+        and
+        of
+        to
+        a
 
 checkout:
   repository: ""

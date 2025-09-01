@@ -1,0 +1,26 @@
+{{- if .Values.recommendations.config.enabled }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: recommendations-config
+data:
+  {{- range $name, $file := .Values.recommendations.config.data }}
+  {{ $name }}: |
+{{ $file | indent 4 }}
+  {{- end }}
+{{- end }}
+
+{{- if .Values.recommendations.resources.enabled }}
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: recommendations-resources
+data:
+  {{- range $name, $file := .Values.recommendations.resources.data }}
+  {{ $name }}: |
+{{ $file | indent 4 }}
+  {{- end }}
+{{- end }}
+
+

@@ -1,41 +1,28 @@
+{{- if .Values.recommendations.worker.enabled }}
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: recommendations
+  name: recommendations-worker
 spec:
   replicas: 1
   selector:
     matchLabels:
-      app: recommendations
+      app: recommendations-worker
   template:
     metadata:
       labels:
-        app: recommendations
+        app: recommendations-worker
     spec:
       containers:
-        - name: recommendations
-          image: {{ default "" .Values.recommendations.repository }}:{{ default "latest" .Values.recommendations.tag }}
-          ports:
-            - containerPort: {{ .Values.recommendations.port }}
+        - name: recommendations-worker
+          image: {{ default "" .Values.recommendations.worker.repository }}:{{ default "latest" .Values.recommendations.worker.tag }}
           env:
             - name: INVENTORY_BASE_URL
               value: {{ quote .Values.recommendations.env.INVENTORY_BASE_URL }}
             - name: RECOMMENDATIONS_SETTINGS_PATH
               value: "/app/config/recommendations-settings.yaml"
-            - name: RECO_TTL_SECONDS
-              value: {{ quote .Values.recommendations.config.data | default dict | toJson | fromJson | get "weights" | default dict | get "ttl_seconds" | default  "60" }}
-          readinessProbe:
-            httpGet:
-              path: /health
-              port: {{ .Values.recommendations.port }}
-            initialDelaySeconds: 5
-            periodSeconds: 10
-          livenessProbe:
-            httpGet:
-              path: /health
-              port: {{ .Values.recommendations.port }}
-            initialDelaySeconds: 15
-            periodSeconds: 20
+            - name: RECO_WORKER_REFRESH_SECONDS
+              value: {{ quote .Values.recommendations.worker.refreshSeconds }}
           volumeMounts:
             {{- if .Values.recommendations.config.enabled }}
             - name: recommendations-config
@@ -56,4 +43,6 @@ spec:
           configMap:
             name: recommendations-resources
         {{- end }}
+{{- end }}
+
 
