@@ -3,6 +3,18 @@ name: On Platform Release
 on:
   repository_dispatch:
     types: [platform_release]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Platform tag to process'
+        required: false
+        type: string
+      DEMO_MODE:
+        description: 'Enable demo mode (verbose logs, request tracing)'
+        required: false
+        default: 'false'
+        type: choice
+        options: ['false', 'true']
 
 jobs:
   handle-release:
@@ -13,6 +25,15 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+
+      - name: Apply DEMO_MODE settings
+        if: ${{ inputs.DEMO_MODE == 'true' || env.DEMO_MODE == 'true' }}
+        run: |
+          echo "🔔 DEMO_MODE enabled"
+          echo "ACTIONS_STEP_DEBUG=true" >> $GITHUB_ENV
+          echo "ACTIONS_RUNNER_DEBUG=true" >> $GITHUB_ENV
+          echo "HTTP_DEBUG_LEVEL=verbose" >> $GITHUB_ENV
+          echo "BASH_XTRACE_ENABLED=1" >> $GITHUB_ENV
 
       - name: Setup Helm
         uses: azure/setup-helm@v4
