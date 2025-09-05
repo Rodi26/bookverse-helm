@@ -17,6 +17,17 @@ spec:
           image: {{ default "" .Values.checkout.repository }}:{{ default "latest" .Values.checkout.tag }}
           ports:
             - containerPort: {{ .Values.checkout.port }}
+          env:
+            - name: INVENTORY_BASE_URL
+              value: {{ quote .Values.checkout.env.INVENTORY_BASE_URL }}
+            - name: REQUEST_TIMEOUT_SECONDS
+              value: {{ quote .Values.checkout.env.REQUEST_TIMEOUT_SECONDS }}
+            - name: RETRY_ATTEMPTS
+              value: {{ quote .Values.checkout.env.RETRY_ATTEMPTS }}
+            - name: PAYMENT_SUCCESS_RATIO
+              value: {{ quote .Values.checkout.env.PAYMENT_SUCCESS_RATIO }}
+            - name: LOG_LEVEL
+              value: {{ quote .Values.checkout.env.LOG_LEVEL }}
           readinessProbe:
             httpGet:
               path: /health

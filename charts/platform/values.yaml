@@ -58,4 +58,10 @@ checkout:
   repository: ""
   tag: ""
   port: 8000
+  env:
+    INVENTORY_BASE_URL: "http://inventory"
+    REQUEST_TIMEOUT_SECONDS: "2"
+    RETRY_ATTEMPTS: "2"
+    PAYMENT_SUCCESS_RATIO: "1.0"
+    LOG_LEVEL: "INFO"
 
