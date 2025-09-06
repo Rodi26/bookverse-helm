@@ -22,6 +22,8 @@ web:
     tls:
       enabled: false
       secretName: ""
+  service:
+    type: ClusterIP
 
 inventory:
   repository: ""
@@ -43,7 +45,6 @@ recommendations:
     repository: ""
     tag: ""
     replicas: 1
-    refreshSeconds: 60
   config:
     enabled: true
     mountPath: "/app/config"

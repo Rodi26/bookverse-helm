@@ -3,7 +3,7 @@ kind: Service
 metadata:
   name: platform-web
 spec:
-  type: ClusterIP
+  type: {{ default "ClusterIP" .Values.web.service.type }}
   selector:
     app: platform-web
   ports:

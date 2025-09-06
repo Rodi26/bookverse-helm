@@ -15,7 +15,7 @@ web:
   ingress:
     enabled: true
     className: ""
-    host: ""
+    host: "web.dev.bookverse.local"
     annotations: {}
     tls:
       enabled: false

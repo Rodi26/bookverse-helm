@@ -3,9 +3,9 @@ apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
   name: platform-web
-  {{- with .Values.web.ingress.annotations }}
+  {{- if and .Values.web.ingress.annotations (gt (len .Values.web.ingress.annotations) 0) }}
   annotations:
-{{ toYaml . | indent 4 }}
+{{ toYaml .Values.web.ingress.annotations | indent 4 }}
   {{- end }}
 spec:
   {{- if .Values.web.ingress.className }}
@@ -21,8 +21,7 @@ spec:
     - secretName: {{ .Values.web.ingress.tls.secretName }}
   {{- end }}
   rules:
-    - {{- if .Values.web.ingress.host }}host: {{ .Values.web.ingress.host | quote }}
-      {{- end }}
+    - host: {{ .Values.web.ingress.host | default "" | quote }}
       http:
         paths:
           - path: /
