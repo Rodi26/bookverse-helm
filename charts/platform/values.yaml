@@ -1,31 +1,48 @@
 global:
   imageRegistry: ""
 
+platform:
+  version: ""
+
 web:
   repository: ""
   tag: ""
+  replicas: 1
   port: 8080
   env:
     BOOKVERSE_ENV: "DEV"
     INVENTORY_BASE_URL: ""
     RECOMMENDATIONS_BASE_URL: ""
     CHECKOUT_BASE_URL: ""
+  ingress:
+    enabled: false
+    className: ""
+    host: ""
+    annotations: {}
+    tls:
+      enabled: false
+      secretName: ""
 
 inventory:
   repository: ""
   tag: ""
+  replicas: 1
   port: 8000
 
 recommendations:
   repository: ""
   tag: ""
+  replicas: 1
   port: 8000
   env:
     INVENTORY_BASE_URL: "http://inventory"
+  cache:
+    ttlSeconds: 60
   worker:
     enabled: true
     repository: ""
     tag: ""
+    replicas: 1
     refreshSeconds: 60
   config:
     enabled: true
@@ -57,6 +74,7 @@ recommendations:
 checkout:
   repository: ""
   tag: ""
+  replicas: 1
   port: 8000
   env:
     INVENTORY_BASE_URL: "http://inventory"

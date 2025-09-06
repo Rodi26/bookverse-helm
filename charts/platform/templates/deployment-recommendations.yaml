@@ -3,7 +3,7 @@ kind: Deployment
 metadata:
   name: recommendations
 spec:
-  replicas: 1
+  replicas: {{ default 1 .Values.recommendations.replicas }}
   selector:
     matchLabels:
       app: recommendations
@@ -14,7 +14,7 @@ spec:
     spec:
       containers:
         - name: recommendations
-          image: {{ default "" .Values.recommendations.repository }}:{{ default "latest" .Values.recommendations.tag }}
+          image: {{ default "" .Values.recommendations.repository }}:{{ default (default .Chart.AppVersion .Values.platform.version) .Values.recommendations.tag }}
           ports:
             - containerPort: {{ .Values.recommendations.port }}
           env:
@@ -23,7 +23,7 @@ spec:
             - name: RECOMMENDATIONS_SETTINGS_PATH
               value: "/app/config/recommendations-settings.yaml"
             - name: RECO_TTL_SECONDS
-              value: {{ quote .Values.recommendations.config.data | default dict | toJson | fromJson | get "weights" | default dict | get "ttl_seconds" | default  "60" }}
+              value: {{ default 60 .Values.recommendations.cache.ttlSeconds | toString | quote }}
           readinessProbe:
             httpGet:
               path: /health

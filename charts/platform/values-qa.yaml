@@ -1,24 +1,35 @@
 global:
   imageRegistry: "${DOCKER_REGISTRY}"
 
+platform:
+  version: "qa"
+
 web:
   repository: "${DOCKER_REGISTRY}/${PROJECT_KEY}-web-docker-internal-local/web"
-  tag: "qa"
+  tag: ""
   env:
     BOOKVERSE_ENV: "QA"
     INVENTORY_BASE_URL: "http://inventory"
     RECOMMENDATIONS_BASE_URL: "http://recommendations"
     CHECKOUT_BASE_URL: "http://checkout"
+  ingress:
+    enabled: true
+    className: ""
+    host: ""
+    annotations: {}
+    tls:
+      enabled: false
+      secretName: ""
 
 inventory:
   repository: "${DOCKER_REGISTRY}/${PROJECT_KEY}-inventory-docker-internal-local/inventory"
-  tag: "qa"
+  tag: ""
 
 recommendations:
   repository: "${DOCKER_REGISTRY}/${PROJECT_KEY}-recommendations-docker-internal-local/recommendations"
-  tag: "qa"
+  tag: ""
 
 checkout:
   repository: "${DOCKER_REGISTRY}/${PROJECT_KEY}-checkout-docker-internal-local/checkout"
-  tag: "qa"
+  tag: ""
 

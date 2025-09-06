@@ -4,7 +4,7 @@ kind: Deployment
 metadata:
   name: recommendations-worker
 spec:
-  replicas: 1
+  replicas: {{ default 1 .Values.recommendations.worker.replicas }}
   selector:
     matchLabels:
       app: recommendations-worker
@@ -15,7 +15,7 @@ spec:
     spec:
       containers:
         - name: recommendations-worker
-          image: {{ default "" .Values.recommendations.worker.repository }}:{{ default "latest" .Values.recommendations.worker.tag }}
+          image: {{ default "" .Values.recommendations.worker.repository }}:{{ default (default .Chart.AppVersion .Values.platform.version) .Values.recommendations.worker.tag }}
           env:
             - name: INVENTORY_BASE_URL
               value: {{ quote .Values.recommendations.env.INVENTORY_BASE_URL }}

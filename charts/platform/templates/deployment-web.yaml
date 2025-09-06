@@ -3,7 +3,7 @@ kind: Deployment
 metadata:
   name: platform-web
 spec:
-  replicas: 1
+  replicas: {{ default 1 .Values.web.replicas }}
   selector:
     matchLabels:
       app: platform-web
@@ -14,7 +14,7 @@ spec:
     spec:
       containers:
         - name: web
-          image: {{ default "" .Values.web.repository }}:{{ default "latest" .Values.web.tag }}
+          image: {{ default "" .Values.web.repository }}:{{ default (default .Chart.AppVersion .Values.platform.version) .Values.web.tag }}
           ports:
             - containerPort: {{ .Values.web.port }}
           readinessProbe:

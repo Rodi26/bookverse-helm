@@ -3,7 +3,7 @@ kind: Deployment
 metadata:
   name: checkout
 spec:
-  replicas: 1
+  replicas: {{ default 1 .Values.checkout.replicas }}
   selector:
     matchLabels:
       app: checkout
@@ -14,7 +14,7 @@ spec:
     spec:
       containers:
         - name: checkout
-          image: {{ default "" .Values.checkout.repository }}:{{ default "latest" .Values.checkout.tag }}
+          image: {{ default "" .Values.checkout.repository }}:{{ default (default .Chart.AppVersion .Values.platform.version) .Values.checkout.tag }}
           ports:
             - containerPort: {{ .Values.checkout.port }}
           env:
