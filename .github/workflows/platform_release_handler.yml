@@ -4,6 +4,9 @@ on:
   repository_dispatch:
     types: [platform_release]
 
+permissions:
+  contents: write
+
 jobs:
   pin_and_package:
     runs-on: ubuntu-latest
