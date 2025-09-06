@@ -10,13 +10,14 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Export AppTrust context
+      - name: Derive AppTrust context
         env:
-          APPTRUST_BASE_URL: ${{ vars.APPTRUST_BASE_URL }}
-          APPTRUST_ACCESS_TOKEN: ${{ secrets.APPTRUST_ACCESS_TOKEN }}
+          JFROG_URL: ${{ vars.JFROG_URL }}
+          JFROG_ADMIN_TOKEN: ${{ secrets.JFROG_ADMIN_TOKEN }}
         run: |
-          echo "APPTRUST_BASE_URL=${APPTRUST_BASE_URL}" >> $GITHUB_ENV
-          echo "APPTRUST_ACCESS_TOKEN=${APPTRUST_ACCESS_TOKEN}" >> $GITHUB_ENV
+          BASE="${JFROG_URL%/}"
+          echo "APPTRUST_BASE_URL=${BASE}/apptrust/api/v1" >> "$GITHUB_ENV"
+          echo "APPTRUST_ACCESS_TOKEN=${JFROG_ADMIN_TOKEN}" >> "$GITHUB_ENV"
 
       - name: Set up Python
         uses: actions/setup-python@v5
