@@ -10,6 +10,14 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Export AppTrust context
+        env:
+          APPTRUST_BASE_URL: ${{ vars.APPTRUST_BASE_URL }}
+          APPTRUST_ACCESS_TOKEN: ${{ secrets.APPTRUST_ACCESS_TOKEN }}
+        run: |
+          echo "APPTRUST_BASE_URL=${APPTRUST_BASE_URL}" >> $GITHUB_ENV
+          echo "APPTRUST_ACCESS_TOKEN=${APPTRUST_ACCESS_TOKEN}" >> $GITHUB_ENV
+
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
@@ -18,15 +26,13 @@ jobs:
       - name: Resolve platform components from AppTrust
         id: resolve
         env:
-          APPTRUST_BASE_URL: ${{ vars.APPTRUST_BASE_URL }}
-          APPTRUST_ACCESS_TOKEN: ${{ secrets.APPTRUST_ACCESS_TOKEN }}
           PLATFORM_APP: bookverse-platform
           PLATFORM_VERSION: ${{ github.event.client_payload.platform_version || github.event.client_payload.tag }}
         run: |
           python - << 'PY'
           import os, json, urllib.request, urllib.parse
-          base=os.environ['APPTRUST_BASE_URL'].rstrip('/')
-          token=os.environ['APPTRUST_ACCESS_TOKEN']
+          base=os.environ.get('APPTRUST_BASE_URL','').rstrip('/')
+          token=os.environ.get('APPTRUST_ACCESS_TOKEN','')
           app=os.environ['PLATFORM_APP']
           version=os.environ['PLATFORM_VERSION']
           req=urllib.request.Request(

@@ -1,4 +1,5 @@
 # BookVerse Helm Platform – Plan of Action
+
 This plan outlines the flow, algorithms, and logic to scaffold and flesh out the Helm repository for BookVerse. It targets the `charts/platform` chart, integrates with GitOps (Argo CD Applications), and supports multiple environments via `values-*.yaml`.
 
 ## Goals
@@ -211,4 +212,3 @@ Do not render HPA or PDB in the demo.
 - Web is exposed via Ingress when enabled and routes to service over HTTP (TLS disabled by default).
 - Recommendations mount config and resources correctly; worker runs only when enabled and respects refresh interval.
 - Lint/template checks pass and docs updated.
-

@@ -1,5 +1,8 @@
 name: Helm CI
 
+env:
+  DEMO_MODE: "false"
+
 on:
   push:
     branches: [ main ]
