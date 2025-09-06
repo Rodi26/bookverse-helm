@@ -11,9 +11,9 @@ web:
   port: 8080
   env:
     BOOKVERSE_ENV: "DEV"
-    INVENTORY_BASE_URL: ""
-    RECOMMENDATIONS_BASE_URL: ""
-    CHECKOUT_BASE_URL: ""
+    INVENTORY_BASE_URL: "http://inventory"
+    RECOMMENDATIONS_BASE_URL: "http://recommendations"
+    CHECKOUT_BASE_URL: "http://checkout"
   ingress:
     enabled: false
     className: ""
@@ -45,6 +45,7 @@ recommendations:
     repository: ""
     tag: ""
     replicas: 1
+    refreshSeconds: 60
   config:
     enabled: true
     mountPath: "/app/config"

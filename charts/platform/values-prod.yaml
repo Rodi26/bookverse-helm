@@ -1,11 +1,11 @@
 global:
-  imageRegistry: "${DOCKER_REGISTRY}"
+  imageRegistry: "evidencetrial.jfrog.io"
 
 platform:
   version: "prod"
 
 web:
-  repository: "${DOCKER_REGISTRY}/${PROJECT_KEY}-web-docker-release-local/web"
+  repository: "evidencetrial.jfrog.io/bookverse-web-docker-release-local/web"
   tag: ""
   env:
     BOOKVERSE_ENV: "PROD"
@@ -22,14 +22,17 @@ web:
       secretName: ""
 
 inventory:
-  repository: "${DOCKER_REGISTRY}/${PROJECT_KEY}-inventory-docker-release-local/inventory"
+  repository: "evidencetrial.jfrog.io/bookverse-inventory-docker-release-local/inventory"
   tag: ""
 
 recommendations:
-  repository: "${DOCKER_REGISTRY}/${PROJECT_KEY}-recommendations-docker-release-local/recommendations"
+  repository: "evidencetrial.jfrog.io/bookverse-recommendations-docker-release-local/recommendations-api"
   tag: ""
+  worker:
+    repository: "evidencetrial.jfrog.io/bookverse-recommendations-docker-release-local/recommendations-worker"
+    tag: ""
 
 checkout:
-  repository: "${DOCKER_REGISTRY}/${PROJECT_KEY}-checkout-docker-release-local/checkout"
+  repository: "evidencetrial.jfrog.io/bookverse-checkout-docker-release-local/checkout"
   tag: ""
 

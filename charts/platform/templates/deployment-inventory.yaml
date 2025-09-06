@@ -14,7 +14,7 @@ spec:
     spec:
       containers:
         - name: inventory
-          image: {{ default "" .Values.inventory.repository }}:{{ default (default .Chart.AppVersion .Values.platform.version) .Values.inventory.tag }}
+          image: {{ default "" .Values.inventory.repository }}:{{ coalesce .Values.inventory.tag .Values.platform.version .Chart.AppVersion "latest" }}
           ports:
             - containerPort: {{ .Values.inventory.port }}
           readinessProbe:

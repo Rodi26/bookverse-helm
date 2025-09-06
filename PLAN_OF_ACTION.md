@@ -1,5 +1,4 @@
 # BookVerse Helm Platform – Plan of Action
-
 This plan outlines the flow, algorithms, and logic to scaffold and flesh out the Helm repository for BookVerse. It targets the `charts/platform` chart, integrates with GitOps (Argo CD Applications), and supports multiple environments via `values-*.yaml`.
 
 ## Goals
@@ -49,7 +48,7 @@ This plan outlines the flow, algorithms, and logic to scaffold and flesh out the
 
 Decision logic for image reference per service `svc` in {web, inventory, recommendations, recommendations.worker, checkout}. The platform version is authoritative; internal services inherit this version unless explicitly overridden.
 
-```
+```txt
 platformTag = default(.Values.platform.version, default(.Chart.AppVersion, "latest"))
 
 if .Values.svc.repository != "":
@@ -69,7 +68,7 @@ Rationale: The platform version provides a single source of truth for the demo. 
 
 For internal communication, prefer ClusterIP service names and ports. Compute base URLs:
 
-```
+```txt
 INVENTORY_BASE_URL = printf "http://%s" (include .Release.Namespace) ? "inventory.%s.svc.cluster.local" : "inventory"
 RECOMMENDATIONS_BASE_URL = "http://recommendations"
 CHECKOUT_BASE_URL = "http://checkout"
@@ -86,7 +85,7 @@ Apply service-specific health endpoints and timing:
 
 Timings (adjustable via values if needed):
 
-```
+```txt
 readiness: initialDelay=5s, period=10s
 liveness: initialDelay=15s, period=20s
 ```
@@ -94,12 +93,13 @@ liveness: initialDelay=15s, period=20s
 ### 4) ConfigMaps and Mounted Resources
 
 `recommendations` uses:
+
 - ConfigMap `recommendations-config` with `recommendations-settings.yaml` when `recommendations.config.enabled`
 - ConfigMap `recommendations-resources` with `stopwords.txt` when `recommendations.resources.enabled`
 
 Mount logic:
 
-```
+```txt
 if config.enabled: mount at config.mountPath
 if resources.enabled: mount at resources.mountPath
 ```
@@ -115,7 +115,7 @@ Worker shares the same mounts and reads refresh interval from `recommendations.w
 
 Ingress is required only for `web`. Algorithm:
 
-```
+```txt
 if .Values.web.ingress.enabled:
   host = .Values.web.ingress.host  # e.g. web.dev.bookverse.local
   annotations = merge(.Values.web.ingress.annotations, classDefaults)
@@ -134,14 +134,14 @@ Defaults: support NGINX ingress; TLS disabled by default; allow class name overr
 
 Values design (static):
 
-```
+```txt
 svc.replicas: integer (default: 1)
 svc.resources: { requests: { cpu, memory }, limits: { cpu, memory } }
 ```
 
 Rendering logic:
 
-```
+```txt
 Render a Deployment with spec.replicas = .Values.svc.replicas (fallback 1).
 Do not render HPA or PDB in the demo.
 ```
@@ -211,5 +211,4 @@ Do not render HPA or PDB in the demo.
 - Web is exposed via Ingress when enabled and routes to service over HTTP (TLS disabled by default).
 - Recommendations mount config and resources correctly; worker runs only when enabled and respects refresh interval.
 - Lint/template checks pass and docs updated.
-
 

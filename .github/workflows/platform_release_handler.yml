@@ -21,7 +21,7 @@ jobs:
           APPTRUST_BASE_URL: ${{ vars.APPTRUST_BASE_URL }}
           APPTRUST_ACCESS_TOKEN: ${{ secrets.APPTRUST_ACCESS_TOKEN }}
           PLATFORM_APP: bookverse-platform
-          PLATFORM_VERSION: ${{ github.event.client_payload.platform_version }}
+          PLATFORM_VERSION: ${{ github.event.client_payload.platform_version || github.event.client_payload.tag }}
         run: |
           python - << 'PY'
           import os, json, urllib.request, urllib.parse
@@ -42,7 +42,7 @@ jobs:
           print("::set-output name=ok::true")
           PY
 
-      - name: Pin image tags in values files
+      - name: Pin image tags in values files (prefer platform.version, also set per-service tags)
         run: |
           python - << 'PY'
           import json, yaml
@@ -64,11 +64,13 @@ jobs:
               versions[ak]=ver
           def update_file(path):
             y=yaml.safe_load(open(path))
+            plat_ver = comp.get('version') or comp.get('platform_version')
+            if plat_ver:
+              y.setdefault('platform', {})['version']=str(plat_ver)
             for ak,svc in mapping.items():
               ver=versions.get(ak)
               if ver:
-                if svc in y and isinstance(y[svc], dict):
-                  y[svc]['tag']=str(ver)
+                y.setdefault(svc, {})['tag']=str(ver)
             with open(path,'w') as f:
               yaml.safe_dump(y, f, sort_keys=False)
           for p in ['charts/platform/values-dev.yaml','charts/platform/values-qa.yaml','charts/platform/values-staging.yaml','charts/platform/values-prod.yaml']:

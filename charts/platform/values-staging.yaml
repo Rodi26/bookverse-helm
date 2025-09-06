@@ -1,11 +1,11 @@
 global:
-  imageRegistry: "${DOCKER_REGISTRY}"
+  imageRegistry: "evidencetrial.jfrog.io"
 
 platform:
   version: "staging"
 
 web:
-  repository: "${DOCKER_REGISTRY}/${PROJECT_KEY}-web-docker-internal-local/web"
+  repository: "evidencetrial.jfrog.io/bookverse-web-docker-internal-local/web"
   tag: ""
   env:
     BOOKVERSE_ENV: "STAGING"
@@ -22,14 +22,17 @@ web:
       secretName: ""
 
 inventory:
-  repository: "${DOCKER_REGISTRY}/${PROJECT_KEY}-inventory-docker-internal-local/inventory"
+  repository: "evidencetrial.jfrog.io/bookverse-inventory-docker-internal-local/inventory"
   tag: ""
 
 recommendations:
-  repository: "${DOCKER_REGISTRY}/${PROJECT_KEY}-recommendations-docker-internal-local/recommendations"
+  repository: "evidencetrial.jfrog.io/bookverse-recommendations-docker-internal-local/recommendations-api"
   tag: ""
+  worker:
+    repository: "evidencetrial.jfrog.io/bookverse-recommendations-docker-internal-local/recommendations-worker"
+    tag: ""
 
 checkout:
-  repository: "${DOCKER_REGISTRY}/${PROJECT_KEY}-checkout-docker-internal-local/checkout"
+  repository: "evidencetrial.jfrog.io/bookverse-checkout-docker-internal-local/checkout"
   tag: ""
 
