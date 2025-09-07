@@ -5,7 +5,7 @@ platform:
   version: "qa"
 
 web:
-  repository: "evidencetrial.jfrog.io/bookverse-web-docker-internal-local/web"
+  repository: "evidencetrial.jfrog.io/bookverse-web-internal-docker-nonprod-local/web"
   tag: ""
   env:
     BOOKVERSE_ENV: "QA"
@@ -22,17 +22,17 @@ web:
       secretName: ""
 
 inventory:
-  repository: "evidencetrial.jfrog.io/bookverse-inventory-docker-internal-local/inventory"
+  repository: "evidencetrial.jfrog.io/bookverse-inventory-internal-docker-nonprod-local/inventory"
   tag: ""
 
 recommendations:
-  repository: "evidencetrial.jfrog.io/bookverse-recommendations-docker-internal-local/recommendations-api"
+  repository: "evidencetrial.jfrog.io/bookverse-recommendations-internal-docker-nonprod-local/recommendations-api"
   tag: ""
   worker:
-    repository: "evidencetrial.jfrog.io/bookverse-recommendations-docker-internal-local/recommendations-worker"
+    repository: "evidencetrial.jfrog.io/bookverse-recommendations-internal-docker-nonprod-local/recommendations-worker"
     tag: ""
 
 checkout:
-  repository: "evidencetrial.jfrog.io/bookverse-checkout-docker-internal-local/checkout"
+  repository: "evidencetrial.jfrog.io/bookverse-checkout-internal-docker-nonprod-local/checkout"
   tag: ""
 
