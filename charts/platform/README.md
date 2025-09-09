@@ -17,6 +17,7 @@ A simple, demo-focused Helm chart that aggregates the BookVerse services (web, i
 - `web.service.type`: Service type for web (default `ClusterIP`).
 - `*.replicas`, `*.port`, `*.env`: Per-service settings.
 - `recommendations.config` and `recommendations.resources`: Optional config/resource ConfigMaps.
+- `platformWebhook.*`: Optional webhook adapter for AppTrust → GitHub `repository_dispatch`.
 
 ## Quickstart
 

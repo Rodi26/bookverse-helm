@@ -2,7 +2,7 @@ name: Handle Platform Release Dispatch
 
 on:
   repository_dispatch:
-    types: [platform_release]
+    types: [platform_release, platform_release_completed]
 
 permissions:
   contents: write
@@ -16,11 +16,12 @@ jobs:
       - name: Derive AppTrust context
         env:
           JFROG_URL: ${{ vars.JFROG_URL }}
-          JFROG_ADMIN_TOKEN: ${{ secrets.JFROG_ADMIN_TOKEN }}
+          JFROG_TOKEN: ${{ secrets.JFROG_ADMIN_TOKEN || secrets.JFROG_ACCESS_TOKEN }}
         run: |
           BASE="${JFROG_URL%/}"
           echo "APPTRUST_BASE_URL=${BASE}/apptrust/api/v1" >> "$GITHUB_ENV"
-          echo "APPTRUST_ACCESS_TOKEN=${JFROG_ADMIN_TOKEN}" >> "$GITHUB_ENV"
+          if [[ -z "${JFROG_TOKEN}" ]]; then echo "Missing JFROG token (admin or access)" >&2; exit 1; fi
+          echo "APPTRUST_ACCESS_TOKEN=${JFROG_TOKEN}" >> "$GITHUB_ENV"
 
       - name: Set up Python
         uses: actions/setup-python@v5
@@ -36,7 +37,7 @@ jobs:
         id: resolve
         env:
           PLATFORM_APP: bookverse-platform
-          PLATFORM_VERSION: ${{ github.event.client_payload.platform_version || github.event.client_payload.tag }}
+          PLATFORM_VERSION: ${{ github.event.client_payload.platform_version || github.event.client_payload.tag || github.event.client_payload.applicationVersion }}
         run: |
           python - << 'PY'
           import os, json, urllib.request, urllib.parse

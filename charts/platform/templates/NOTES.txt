@@ -11,3 +11,7 @@ This chart deploys:
 
 Values files map image registry/repository/tags per environment.
 
+If platformWebhook is enabled, the adapter will expose:
+- Service: platform-webhook (port 80 → container {{ .Values.platformWebhook.port }})
+- Ingress (optional): /webhooks/apptrust at host {{ .Values.platformWebhook.ingress.host }}
+

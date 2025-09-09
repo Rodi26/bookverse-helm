@@ -4,6 +4,28 @@ global:
 platform:
   version: ""
 
+platformWebhook:
+  enabled: false
+  repository: ""
+  tag: ""
+  replicas: 1
+  port: 8000
+  env:
+    GITHUB_OWNER: "yonatanp-jfrog"
+    GITHUB_REPO: "bookverse-helm"
+    REPO_DISPATCH_EVENT: "platform_release_completed"
+  secret:
+    enabled: true
+    name: "platform-repo-dispatch" # must contain key GITHUB_TOKEN
+  ingress:
+    enabled: false
+    className: ""
+    host: ""
+    annotations: {}
+    tls:
+      enabled: false
+      secretName: ""
+
 web:
   repository: ""
   tag: ""

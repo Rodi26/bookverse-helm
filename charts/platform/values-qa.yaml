@@ -2,6 +2,15 @@ global:
   imageRegistry: evidencetrial.jfrog.io
 platform:
   version: 2.1.20
+
+platformWebhook:
+  enabled: false
+  repository: "evidencetrial.jfrog.io/bookverse-platform-internal-docker-nonprod-local/platform-webhook"
+  tag: ""
+  ingress:
+    enabled: false
+    host: "webhook.qa.bookverse.local"
+
 web:
   repository: evidencetrial.jfrog.io/bookverse-web-internal-docker-nonprod-local/web
   tag: ''

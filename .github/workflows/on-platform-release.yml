@@ -1,8 +1,7 @@
 name: On Platform Release
 
 on:
-  repository_dispatch:
-    types: [platform_release]
+  # repository_dispatch intentionally disabled to avoid duplicate handling; use platform_release_handler.yml
   workflow_dispatch:
     inputs:
       tag:
