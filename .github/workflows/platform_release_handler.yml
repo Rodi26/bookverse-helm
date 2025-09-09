@@ -24,7 +24,7 @@ jobs:
           python - << 'PY'
           import json, os
           path=os.environ.get('GITHUB_EVENT_PATH')
-          data=json.load(open(path))
+          data=json.load(open(path)) if path and os.path.exists(path) else {}
           event_name=os.environ.get('GITHUB_EVENT_NAME','')
           action = data.get('action') or os.environ.get('GITHUB_EVENT_ACTION','')
           stage=''
@@ -34,7 +34,7 @@ jobs:
             # Fallback to top-level payload fields (e.g., JFrog webhook forwarded as-is)
             if not stage:
               top = (data.get('data') or {})
-              stage = top.get('stage') or data.get('stage') or ''
+              stage = (top.get('stage') if isinstance(top, dict) else '') or data.get('stage') or ''
             # Release events imply PROD by definition
             if not stage and str(action).lower()=='release_completed':
               stage='PROD'
@@ -53,8 +53,9 @@ jobs:
           JFROG_TOKEN: ${{ secrets.JFROG_ADMIN_TOKEN || secrets.JFROG_ACCESS_TOKEN }}
         run: |
           BASE="${JFROG_URL%/}"
-          echo "APPTRUST_BASE_URL=${BASE}/apptrust/api/v1" >> "$GITHUB_ENV"
+          if [[ -z "${BASE}" ]]; then echo "Missing vars.JFROG_URL" >&2; exit 1; fi
           if [[ -z "${JFROG_TOKEN}" ]]; then echo "Missing JFROG token (admin or access)" >&2; exit 1; fi
+          echo "APPTRUST_BASE_URL=${BASE}/apptrust/api/v1" >> "$GITHUB_ENV"
           echo "APPTRUST_ACCESS_TOKEN=${JFROG_TOKEN}" >> "$GITHUB_ENV"
 
       - name: Set up Python
@@ -74,60 +75,86 @@ jobs:
         id: resolve
         env:
           PLATFORM_APP: bookverse-platform
+          INPUT_VERSION: ${{ github.event.inputs.platform_version }}
         run: |
           python - << 'PY'
           import os, json, urllib.request, urllib.parse
           base=os.environ.get('APPTRUST_BASE_URL','').rstrip('/')
           token=os.environ.get('APPTRUST_ACCESS_TOKEN','')
-          app=os.environ['PLATFORM_APP']
-          # Derive platform version from payload (supports both client_payload and top-level JFrog-style payload)
-          version=os.environ.get('PLATFORM_VERSION','') or ''
+          app=os.environ.get('PLATFORM_APP','bookverse-platform')
+          version=os.environ.get('INPUT_VERSION','').strip()
+          # Try resolve from repository_dispatch payload
+          ev_path=os.environ.get('GITHUB_EVENT_PATH','')
+          if not version and ev_path and os.path.exists(ev_path):
+              try:
+                  ev=json.load(open(ev_path))
+                  cp=ev.get('client_payload') if isinstance(ev.get('client_payload'), dict) else {}
+                  if isinstance(cp, dict):
+                      data = cp.get('data') if isinstance(cp.get('data'), dict) else {}
+                      version = data.get('application_version') or cp.get('platform_version') or cp.get('application_version') or version
+                  if not version:
+                      top=ev.get('data') if isinstance(ev.get('data'), dict) else {}
+                      version = (top.get('application_version') if isinstance(top, dict) else None) or ev.get('platform_version') or ev.get('application_version') or version
+              except Exception:
+                  pass
+          if not base or not token:
+              raise SystemExit('Missing AppTrust base URL or token')
+          if not version:
+              # Fallback: try latest RELEASED; if that fails, try latest regardless of status
+              import urllib.error
+              def fetch_versions(url: str):
+                  req=urllib.request.Request(url, headers={"Authorization": f"Bearer {token}", "Accept": "application/json"})
+                  try:
+                      with urllib.request.urlopen(req, timeout=30) as resp:
+                          raw = resp.read().decode('utf-8') or '[]'
+                      try:
+                          return json.loads(raw)
+                      except Exception:
+                          return []
+                  except urllib.error.HTTPError as e:
+                      body = ''
+                      try:
+                          body = e.read().decode('utf-8', 'ignore')
+                      except Exception:
+                          pass
+                      print(f"WARN: versions query failed {e.code} for {url} -> {body[:300]}")
+                      return []
+              base_url=f"{base}/applications/{urllib.parse.quote(app)}/versions?limit=1"
+              payload = fetch_versions(base_url + "&release_status=RELEASED")
+              if not payload:
+                  payload = fetch_versions(base_url)
+              if isinstance(payload, dict):
+                  candidates = payload.get('results') or payload.get('data') or payload.get('items') or payload.get('versions') or []
+              else:
+                  candidates = payload
+              if not candidates:
+                  raise SystemExit('Unable to resolve latest platform version from AppTrust')
+              first = candidates[0]
+              version = str(first.get('version') or first.get('name') or '')
+          if not version:
+              raise SystemExit('Missing PLATFORM_VERSION (payload or fallback)')
+          url=f"{base}/applications/{urllib.parse.quote(app)}/versions/{urllib.parse.quote(version)}/content"
+          req=urllib.request.Request(url, headers={"Authorization": f"Bearer {token}", "Accept": "application/json"})
           try:
-            ev_path=os.environ.get('GITHUB_EVENT_PATH','')
-            if ev_path and not version:
-              ev=json.load(open(ev_path))
-              cp=(ev.get('client_payload') or {}) if isinstance(ev.get('client_payload'), dict) else {}
-              version=(cp.get('data') or {}).get('application_version') or cp.get('platform_version') or cp.get('application_version') or version
-              if not version:
-                top=(ev.get('data') or {}) if isinstance(ev.get('data'), dict) else {}
-                version=top.get('application_version') or ev.get('platform_version') or ev.get('application_version') or version
-          except Exception:
-            pass
-          # Fallback: fetch latest platform version from AppTrust if still missing
-          if not version:
-            vreq=urllib.request.Request(
-              url=f"{base}/applications/{urllib.parse.quote(app)}/versions?limit=1&order_by=created&order_asc=false",
-              headers={"Authorization": f"Bearer {token}", "Accept": "application/json"}
-            )
-            with urllib.request.urlopen(vreq, timeout=30) as resp:
-              lst=json.loads(resp.read().decode('utf-8'))
-            candidates=[]
-            if isinstance(lst, list):
-              candidates=lst
-            elif isinstance(lst, dict):
-              candidates = lst.get('results') or lst.get('data') or lst.get('items') or lst.get('versions') or []
-            if not candidates:
-              raise SystemExit('Unable to resolve latest platform version from AppTrust')
-            first=candidates[0]
-            version=str(first.get('version') or first.get('name') or '')
-          if not version:
-            raise SystemExit('Missing PLATFORM_VERSION (payload or fallback)')
-          req=urllib.request.Request(
-            url=f"{base}/applications/{urllib.parse.quote(app)}/versions/{urllib.parse.quote(version)}/content",
-            headers={"Authorization": f"Bearer {token}", "Accept": "application/json"}
-          )
-          with urllib.request.urlopen(req, timeout=30) as resp:
-            data=json.loads(resp.read().decode('utf-8'))
-          with open('platform_components.json','w') as f:
-            json.dump(data, f)
+              with urllib.request.urlopen(req, timeout=60) as resp:
+                  data=json.loads(resp.read().decode('utf-8') or '{}')
+          except urllib.error.HTTPError as e:
+              body = ''
+              try:
+                  body = e.read().decode('utf-8', 'ignore')
+              except Exception:
+                  pass
+              raise SystemExit(f"Failed to fetch platform content for version {version}: {e.code} {body[:300]}")
+          with open('platform_components.json','w', encoding='utf-8') as f:
+              json.dump(data, f)
           geh = os.environ.get('GITHUB_ENV')
           if geh:
-            with open(geh,'a',encoding='utf-8') as ef:
-              ef.write(f"RESOLVED_PV={version}\n")
-          print("::set-output name=ok::true")
+              with open(geh, 'a', encoding='utf-8') as ef:
+                  ef.write(f"RESOLVED_PV={version}\n")
+          print(f"Resolved platform version: {version}")
           PY
 
-      - name: Pin image tags in values.yaml (prefer platform.version, also set per-service tags)
+      - name: Pin image tags in values.yaml
         if: ${{ env.SKIP != 'true' }}
         run: |
           python - << 'PY'
@@ -143,22 +170,23 @@ jobs:
           # Extract versions from sources.versions if present
           versions={}
           src=comp.get('sources',{}).get('versions',[])
-          for v in src:
-            ak=v.get('application_key') or v.get('application') or ''
-            ver=v.get('version')
-            if ak and ver:
-              versions[ak]=ver
+          if isinstance(src, list):
+              for v in src:
+                  ak=v.get('application_key') or v.get('application') or ''
+                  ver=v.get('version')
+                  if ak and ver:
+                      versions[ak]=ver
           def update_file(path):
-            y=yaml.safe_load(open(path))
-            plat_ver = comp.get('version') or comp.get('platform_version')
-            if plat_ver:
-              y.setdefault('platform', {})['version']=str(plat_ver)
-            for ak,svc in mapping.items():
-              ver=versions.get(ak)
-              if ver:
-                y.setdefault(svc, {})['tag']=str(ver)
-            with open(path,'w') as f:
-              yaml.safe_dump(y, f, sort_keys=False)
+              y=yaml.safe_load(open(path))
+              plat_ver = comp.get('version') or comp.get('platform_version')
+              if plat_ver is not None:
+                  y.setdefault('platform', {})['version']=str(plat_ver)
+              for ak,svc in mapping.items():
+                  ver=versions.get(ak)
+                  if ver:
+                      y.setdefault(svc, {})['tag']=str(ver)
+              with open(path,'w') as f:
+                  yaml.safe_dump(y, f, sort_keys=False)
           update_file('charts/platform/values.yaml')
           PY
 
@@ -166,12 +194,18 @@ jobs:
         if: ${{ env.SKIP != 'true' }}
         uses: stefanzweifel/git-auto-commit-action@v5
         with:
-          commit_message: "chore(platform): pin image tags for platform release ${{ env.RESOLVED_PV }}"
+          commit_message: "chore(platform): pin versions for platform release ${{ env.RESOLVED_PV }}"
+          file_pattern: charts/platform/values.yaml platform_components.json
+
+      - name: Setup Helm
+        if: ${{ env.SKIP != 'true' }}
+        uses: azure/setup-helm@v4
+        with:
+          version: v3.14.4
 
       - name: Helm lint and package
         if: ${{ env.SKIP != 'true' }}
         run: |
           helm lint charts/platform
+          mkdir -p dist
           helm package charts/platform --destination dist
-
-
