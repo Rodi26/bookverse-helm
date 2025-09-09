@@ -214,6 +214,7 @@ jobs:
                   if ak and ver:
                       versions[ak]=ver
           def update_file(path):
+<<<<<<< HEAD
               y=yaml.safe_load(open(path))
               plat_ver = comp.get('version') or comp.get('platform_version')
               if plat_ver is not None:
@@ -225,6 +226,20 @@ jobs:
               with open(path,'w') as f:
                   yaml.safe_dump(y, f, sort_keys=False)
           update_file('charts/platform/values.yaml')
+=======
+            y=yaml.safe_load(open(path))
+            plat_ver = comp.get('version') or comp.get('platform_version')
+            if plat_ver:
+              y.setdefault('platform', {})['version']=str(plat_ver)
+            for ak,svc in mapping.items():
+              ver=versions.get(ak)
+              if ver:
+                y.setdefault(svc, {})['tag']=str(ver)
+            with open(path,'w') as f:
+              yaml.safe_dump(y, f, sort_keys=False)
+          for p in ['charts/platform/values-prod.yaml']:
+            update_file(p)
+>>>>>>> temp-squash-1757426822
           PY
 
       - name: Commit and push changes
