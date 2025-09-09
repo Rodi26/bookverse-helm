@@ -1,0 +1,39 @@
+global:
+  imageRegistry: apptrustswampupc.jfrog.io
+platform:
+  version: 2.1.20
+platformWebhook:
+  enabled: false
+  repository: apptrustswampupc.jfrog.io/bookverse-platform-public-docker-release-local/platform-webhook
+  tag: ''
+  ingress:
+    enabled: false
+    host: webhook.prod.bookverse.local
+web:
+  repository: apptrustswampupc.jfrog.io/bookverse-web-internal-docker-release-local/web
+  tag: ''
+  env:
+    BOOKVERSE_ENV: PROD
+    INVENTORY_BASE_URL: http://inventory
+    RECOMMENDATIONS_BASE_URL: http://recommendations
+    CHECKOUT_BASE_URL: http://checkout
+  ingress:
+    enabled: true
+    className: ''
+    host: web.prod.bookverse.local
+    annotations: {}
+    tls:
+      enabled: false
+      secretName: ''
+inventory:
+  repository: apptrustswampupc.jfrog.io/bookverse-inventory-internal-docker-release-local/inventory
+  tag: ''
+recommendations:
+  repository: apptrustswampupc.jfrog.io/bookverse-recommendations-internal-docker-release-local/recommendations-api
+  tag: ''
+  worker:
+    repository: apptrustswampupc.jfrog.io/bookverse-recommendations-internal-docker-release-local/recommendations-worker
+    tag: ''
+checkout:
+  repository: apptrustswampupc.jfrog.io/bookverse-checkout-internal-docker-release-local/checkout
+  tag: ''
