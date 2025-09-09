@@ -2,7 +2,7 @@ name: Handle Platform Release Dispatch
 
 on:
   repository_dispatch:
-    types: [platform_release_completed, release_completed, platform_release]
+    types: [release_completed]
   workflow_dispatch:
     inputs:
       platform_version:
@@ -43,7 +43,7 @@ jobs:
         id: resolve
         env:
           PLATFORM_APP: bookverse-platform
-          PLATFORM_VERSION: ${{ github.event.client_payload.platform_version || github.event.client_payload.tag || github.event.client_payload.applicationVersion || github.event.client_payload.application_version || github.event.client_payload.data.applicationVersion || github.event.client_payload.data.application_version || github.event.inputs.platform_version }}
+          PLATFORM_VERSION: ${{ github.event.client_payload.data.application_version || github.event.inputs.platform_version }}
         run: |
           python - << 'PY'
           import os, json, urllib.request, urllib.parse
