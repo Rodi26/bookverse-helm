@@ -1,89 +1,78 @@
 global:
-  imageRegistry: ""
-
+  imageRegistry: ''
 platform:
-  version: ""
-
+  version: 2.1.25
 platformWebhook: {}
-
 web:
-  repository: ""
-  tag: ""
+  repository: ''
+  tag: ''
   replicas: 1
   port: 8080
   env:
-    BOOKVERSE_ENV: "DEV"
-    INVENTORY_BASE_URL: "http://inventory"
-    RECOMMENDATIONS_BASE_URL: "http://recommendations"
-    CHECKOUT_BASE_URL: "http://checkout"
+    BOOKVERSE_ENV: DEV
+    INVENTORY_BASE_URL: http://inventory
+    RECOMMENDATIONS_BASE_URL: http://recommendations
+    CHECKOUT_BASE_URL: http://checkout
   ingress:
     enabled: false
-    className: ""
-    host: ""
+    className: ''
+    host: ''
     annotations: {}
     tls:
       enabled: false
-      secretName: ""
+      secretName: ''
   service:
     type: ClusterIP
-
 inventory:
-  repository: ""
-  tag: ""
+  repository: ''
+  tag: ''
   replicas: 1
   port: 8000
-
 recommendations:
-  repository: ""
-  tag: ""
+  repository: ''
+  tag: ''
   replicas: 1
   port: 8000
   env:
-    INVENTORY_BASE_URL: "http://inventory"
+    INVENTORY_BASE_URL: http://inventory
   cache:
     ttlSeconds: 60
   worker:
     enabled: true
-    repository: ""
-    tag: ""
+    repository: ''
+    tag: ''
     replicas: 1
     refreshSeconds: 60
   config:
     enabled: true
-    mountPath: "/app/config"
+    mountPath: /app/config
     data:
-      recommendations-settings.yaml: |
-        weights:
-          genre: 1.0
-          author: 0.25
-          popularity: 0.10
-        limits:
-          default: 10
-          max: 50
-        features:
-          filter_out_of_stock: true
-          enable_cache: false
-          ttl_seconds: 60
+      recommendations-settings.yaml: "weights:\n  genre: 1.0\n  author: 0.25\n  popularity:\
+        \ 0.10\nlimits:\n  default: 10\n  max: 50\nfeatures:\n  filter_out_of_stock:\
+        \ true\n  enable_cache: false\n  ttl_seconds: 60\n"
   resources:
     enabled: true
-    mountPath: "/app/resources"
+    mountPath: /app/resources
     data:
-      stopwords.txt: |
-        the
+      stopwords.txt: 'the
+
         and
+
         of
+
         to
+
         a
 
+        '
 checkout:
-  repository: ""
-  tag: ""
+  repository: ''
+  tag: ''
   replicas: 1
   port: 8000
   env:
-    INVENTORY_BASE_URL: "http://inventory"
-    REQUEST_TIMEOUT_SECONDS: "2"
-    RETRY_ATTEMPTS: "2"
-    PAYMENT_SUCCESS_RATIO: "1.0"
-    LOG_LEVEL: "INFO"
-
+    INVENTORY_BASE_URL: http://inventory
+    REQUEST_TIMEOUT_SECONDS: '2'
+    RETRY_ATTEMPTS: '2'
+    PAYMENT_SUCCESS_RATIO: '1.0'
+    LOG_LEVEL: INFO
