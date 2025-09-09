@@ -2,7 +2,7 @@ name: Handle Platform Release Dispatch
 
 on:
   repository_dispatch:
-    types: [platform_release, platform_release_completed]
+    types: [platform_release_completed]
 
 permissions:
   contents: write
