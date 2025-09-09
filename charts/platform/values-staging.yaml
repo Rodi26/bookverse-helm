@@ -1,16 +1,16 @@
 global:
-  imageRegistry: evidencetrial.jfrog.io
+  imageRegistry: apptrustswampupc.jfrog.io
 platform:
   version: 2.1.21
 platformWebhook:
   enabled: false
-  repository: evidencetrial.jfrog.io/bookverse-platform-internal-docker-nonprod-local/platform-webhook
+  repository: apptrustswampupc.jfrog.io/bookverse-platform-internal-docker-nonprod-local/platform-webhook
   tag: ''
   ingress:
     enabled: false
     host: webhook.staging.bookverse.local
 web:
-  repository: evidencetrial.jfrog.io/bookverse-web-internal-docker-nonprod-local/web
+  repository: apptrustswampupc.jfrog.io/bookverse-web-internal-docker-nonprod-local/web
   tag: ''
   env:
     BOOKVERSE_ENV: STAGING
@@ -26,14 +26,14 @@ web:
       enabled: false
       secretName: ''
 inventory:
-  repository: evidencetrial.jfrog.io/bookverse-inventory-internal-docker-nonprod-local/inventory
+  repository: apptrustswampupc.jfrog.io/bookverse-inventory-internal-docker-nonprod-local/inventory
   tag: ''
 recommendations:
-  repository: evidencetrial.jfrog.io/bookverse-recommendations-internal-docker-nonprod-local/recommendations-api
+  repository: apptrustswampupc.jfrog.io/bookverse-recommendations-internal-docker-nonprod-local/recommendations-api
   tag: ''
   worker:
-    repository: evidencetrial.jfrog.io/bookverse-recommendations-internal-docker-nonprod-local/recommendations-worker
+    repository: apptrustswampupc.jfrog.io/bookverse-recommendations-internal-docker-nonprod-local/recommendations-worker
     tag: ''
 checkout:
-  repository: evidencetrial.jfrog.io/bookverse-checkout-internal-docker-nonprod-local/checkout
+  repository: apptrustswampupc.jfrog.io/bookverse-checkout-internal-docker-nonprod-local/checkout
   tag: ''
