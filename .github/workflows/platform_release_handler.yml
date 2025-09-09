@@ -114,6 +114,13 @@ jobs:
                       )
               except Exception:
                   pass
+          # Validate version format from payload; treat invalid or placeholder as missing to trigger fallback
+          if version:
+              _pat = re.compile(r'^[A-Za-z0-9_][A-Za-z0-9_.\-+]*$')
+              _v = str(version).strip()
+              if _v == '<no value>' or not _pat.match(_v):
+                  print(f"INFO: Ignoring invalid platform version from payload: {_v!r}")
+                  version = ''
           if not base or not token:
               raise SystemExit('Missing AppTrust base URL or token')
           if not version:
