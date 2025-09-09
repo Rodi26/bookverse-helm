@@ -9,7 +9,7 @@ Platform-centric Helm charts for the BookVerse demo.
 ## CI
 
 - `Helm CI` lints and packages the chart; upload to JFrog is a placeholder until connectivity is available.
-- `Platform release handler` listens to `repository_dispatch` `platform_release_completed` and pins versions in values files, then packages the chart.
+- `Platform release handler` listens to `repository_dispatch` (PROD) and pins versions in `charts/platform/values.yaml`, then packages the chart.
 
 ## Local packaging
 

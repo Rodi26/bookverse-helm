@@ -2,7 +2,13 @@ name: Handle Platform Release Dispatch
 
 on:
   repository_dispatch:
-    types: [platform_release_completed]
+    types: [release_completed]
+  workflow_dispatch:
+    inputs:
+      platform_version:
+        description: "Platform application version (for manual/testing runs)"
+        required: false
+        type: string
 
 permissions:
   contents: write
@@ -13,7 +19,35 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Gate: only process PROD repository_dispatch events
+        run: |
+          python - << 'PY'
+          import json, os
+          path=os.environ.get('GITHUB_EVENT_PATH')
+          data=json.load(open(path))
+          event_name=os.environ.get('GITHUB_EVENT_NAME','')
+          action = data.get('action') or os.environ.get('GITHUB_EVENT_ACTION','')
+          stage=''
+          if event_name=='repository_dispatch':
+            cp = (data.get('client_payload') or {}) if isinstance(data.get('client_payload'), dict) else {}
+            stage = (cp.get('data') or {}).get('stage') or cp.get('stage') or ''
+            # Fallback to top-level payload fields (e.g., JFrog webhook forwarded as-is)
+            if not stage:
+              top = (data.get('data') or {})
+              stage = top.get('stage') or data.get('stage') or ''
+            # Release events imply PROD by definition
+            if not stage and str(action).lower()=='release_completed':
+              stage='PROD'
+          if event_name!='repository_dispatch' or str(stage).lower()!='prod':
+            with open(os.environ['GITHUB_ENV'],'a') as f:
+              f.write('SKIP=true\n')
+            print(f"Skipping: event={event_name}, action={action!r}, stage={stage!r}")
+          else:
+            print("Proceeding: repository_dispatch for PROD")
+          PY
+
       - name: Derive AppTrust context
+        if: ${{ env.SKIP != 'true' }}
         env:
           JFROG_URL: ${{ vars.JFROG_URL }}
           JFROG_TOKEN: ${{ secrets.JFROG_ADMIN_TOKEN || secrets.JFROG_ACCESS_TOKEN }}
@@ -24,41 +58,77 @@ jobs:
           echo "APPTRUST_ACCESS_TOKEN=${JFROG_TOKEN}" >> "$GITHUB_ENV"
 
       - name: Set up Python
+        if: ${{ env.SKIP != 'true' }}
         uses: actions/setup-python@v5
         with:
           python-version: '3.11'
 
       - name: Install dependencies
+        if: ${{ env.SKIP != 'true' }}
         run: |
           python -m pip install --upgrade pip
           pip install PyYAML
 
       - name: Resolve platform components from AppTrust
+        if: ${{ env.SKIP != 'true' }}
         id: resolve
         env:
           PLATFORM_APP: bookverse-platform
-          PLATFORM_VERSION: ${{ github.event.client_payload.platform_version || github.event.client_payload.tag || github.event.client_payload.applicationVersion }}
         run: |
           python - << 'PY'
           import os, json, urllib.request, urllib.parse
           base=os.environ.get('APPTRUST_BASE_URL','').rstrip('/')
           token=os.environ.get('APPTRUST_ACCESS_TOKEN','')
           app=os.environ['PLATFORM_APP']
-          version=os.environ['PLATFORM_VERSION']
+          # Derive platform version from payload (supports both client_payload and top-level JFrog-style payload)
+          version=os.environ.get('PLATFORM_VERSION','') or ''
+          try:
+            ev_path=os.environ.get('GITHUB_EVENT_PATH','')
+            if ev_path and not version:
+              ev=json.load(open(ev_path))
+              cp=(ev.get('client_payload') or {}) if isinstance(ev.get('client_payload'), dict) else {}
+              version=(cp.get('data') or {}).get('application_version') or cp.get('platform_version') or cp.get('application_version') or version
+              if not version:
+                top=(ev.get('data') or {}) if isinstance(ev.get('data'), dict) else {}
+                version=top.get('application_version') or ev.get('platform_version') or ev.get('application_version') or version
+          except Exception:
+            pass
+          # Fallback: fetch latest platform version from AppTrust if still missing
+          if not version:
+            vreq=urllib.request.Request(
+              url=f"{base}/applications/{urllib.parse.quote(app)}/versions?limit=1&order_by=created&order_asc=false",
+              headers={"Authorization": f"Bearer {token}", "Accept": "application/json"}
+            )
+            with urllib.request.urlopen(vreq, timeout=30) as resp:
+              lst=json.loads(resp.read().decode('utf-8'))
+            candidates=[]
+            if isinstance(lst, list):
+              candidates=lst
+            elif isinstance(lst, dict):
+              candidates = lst.get('results') or lst.get('data') or lst.get('items') or lst.get('versions') or []
+            if not candidates:
+              raise SystemExit('Unable to resolve latest platform version from AppTrust')
+            first=candidates[0]
+            version=str(first.get('version') or first.get('name') or '')
+          if not version:
+            raise SystemExit('Missing PLATFORM_VERSION (payload or fallback)')
           req=urllib.request.Request(
             url=f"{base}/applications/{urllib.parse.quote(app)}/versions/{urllib.parse.quote(version)}/content",
             headers={"Authorization": f"Bearer {token}", "Accept": "application/json"}
           )
           with urllib.request.urlopen(req, timeout=30) as resp:
             data=json.loads(resp.read().decode('utf-8'))
-          # expect data to include sources.versions or equivalent structure
-          # write to file for next step
           with open('platform_components.json','w') as f:
             json.dump(data, f)
+          geh = os.environ.get('GITHUB_ENV')
+          if geh:
+            with open(geh,'a',encoding='utf-8') as ef:
+              ef.write(f"RESOLVED_PV={version}\n")
           print("::set-output name=ok::true")
           PY
 
-      - name: Pin image tags in values files (prefer platform.version, also set per-service tags)
+      - name: Pin image tags in values.yaml (prefer platform.version, also set per-service tags)
+        if: ${{ env.SKIP != 'true' }}
         run: |
           python - << 'PY'
           import json, yaml
@@ -89,16 +159,17 @@ jobs:
                 y.setdefault(svc, {})['tag']=str(ver)
             with open(path,'w') as f:
               yaml.safe_dump(y, f, sort_keys=False)
-          for p in ['charts/platform/values-dev.yaml','charts/platform/values-qa.yaml','charts/platform/values-staging.yaml','charts/platform/values-prod.yaml']:
-            update_file(p)
+          update_file('charts/platform/values.yaml')
           PY
 
       - name: Commit and push changes
+        if: ${{ env.SKIP != 'true' }}
         uses: stefanzweifel/git-auto-commit-action@v5
         with:
-          commit_message: "chore(platform): pin image tags for platform release ${{ github.event.client_payload.platform_version }}"
+          commit_message: "chore(platform): pin image tags for platform release ${{ env.RESOLVED_PV }}"
 
       - name: Helm lint and package
+        if: ${{ env.SKIP != 'true' }}
         run: |
           helm lint charts/platform
           helm package charts/platform --destination dist

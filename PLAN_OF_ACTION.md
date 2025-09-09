@@ -1,12 +1,12 @@
 # BookVerse Helm Platform – Plan of Action
 
-This plan outlines the flow, algorithms, and logic to scaffold and flesh out the Helm repository for BookVerse. It targets the `charts/platform` chart, integrates with GitOps (Argo CD Applications), and supports multiple environments via `values-*.yaml`.
+This plan outlines the flow, algorithms, and logic to scaffold and flesh out the Helm repository for BookVerse. It targets the `charts/platform` chart and integrates with GitOps (Argo CD Applications). The chart uses a single `values.yaml` (no env overlays).
 
 ## Goals
 
 - Single platform chart aggregating `web`, `inventory`, `recommendations`, `recommendations-worker`, `checkout` and deploying them as one unit.
 - One platform version controls all component image tags; per-service overrides are possible but discouraged.
-- Environment-driven configuration (dev/qa/staging/prod) with overridable images, env vars, and ingress.
+- Single values file (`values.yaml`) drives configuration; no per-environment overlay files.
 - Simple, static deployments: readiness/liveness probes, fixed replicas/resources, no HPA/PDB by default.
 - GitOps-friendly structure compatible with `bookverse-demo-assets/gitops/apps/*/platform.yaml`.
 - Emphasis on demo simplicity, readability, elegance, and easy maintenance.
@@ -22,7 +22,7 @@ This plan outlines the flow, algorithms, and logic to scaffold and flesh out the
 ## High-level Flow
 
 1. Inputs resolved (values layering):
-   - Chart defaults `values.yaml` → environment overrides `values-<env>.yaml` → optional Helm `--set` overrides
+   - Single chart defaults `values.yaml` → optional Helm `--set` overrides
    - Image registry and repositories resolved via `global.imageRegistry` and per-service `repository`/`tag`
 2. Template rendering:
    - Generate Deployments, Services, Ingresses, ConfigMaps; no HPA/PDB by default
@@ -35,7 +35,7 @@ This plan outlines the flow, algorithms, and logic to scaffold and flesh out the
 
 - `charts/platform/Chart.yaml`: chart metadata
 - `charts/platform/values.yaml`: safe defaults (no secrets), sensible dev defaults
-- `charts/platform/values-<env>.yaml`: env-specific images, tags, URL bases, ingress hosts, resource classes
+  
 - `templates/`
   - Deployments: `deployment-*.yaml`
   - Services: `service-*.yaml`
@@ -171,11 +171,11 @@ Do not render HPA or PDB in the demo.
    - Optionally expose `securityContext` and `podSecurityContext` values, but keep defaults minimal
 4) Documentation and examples
    - Update chart `README.md` with install commands, values schema, and the platform-version model
-   - Provide example `values-qa.yaml` and `values-staging.yaml` aligned with ArgoCD apps
+   - Remove references to env overlays; use `values.yaml` only
 
 ## GitOps Flow with Argo CD
 
-- Apps in `bookverse-demo-assets/gitops/apps/*/platform.yaml` already point to this chart with the right value files.
+- Apps in `bookverse-demo-assets/gitops/apps/*/platform.yaml` point to this chart without additional value files.
 - On commit to `main` of the Helm repo:
   - ArgoCD detects change, syncs per environment
   - Rollouts happen per Deployment strategy; replicas are static and controlled via values
@@ -184,7 +184,6 @@ Do not render HPA or PDB in the demo.
 
 1. Local dry-runs:
    - `helm template charts/platform -f charts/platform/values.yaml`
-   - Add `-f values-dev.yaml` to verify env overlay
 2. Linting:
    - `helm lint charts/platform`
 3. Kind/minikube smoke tests:
