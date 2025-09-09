@@ -89,7 +89,7 @@ jobs:
                 y.setdefault(svc, {})['tag']=str(ver)
             with open(path,'w') as f:
               yaml.safe_dump(y, f, sort_keys=False)
-          for p in ['charts/platform/values-dev.yaml','charts/platform/values-qa.yaml','charts/platform/values-staging.yaml','charts/platform/values-prod.yaml']:
+          for p in ['charts/platform/values-prod.yaml']:
             update_file(p)
           PY
 

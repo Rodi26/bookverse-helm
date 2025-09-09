@@ -21,26 +21,25 @@ A simple, demo-focused Helm chart that aggregates the BookVerse services (web, i
 
 ## Quickstart
 
-Render (dev):
+Render (prod-only):
 
 ```bash
-helm template bookverse-dev charts/platform -f charts/platform/values.yaml -f charts/platform/values-dev.yaml
+helm template bookverse charts/platform -f charts/platform/values.yaml -f charts/platform/values-prod.yaml
 ```
 
-Install (dev):
+Install (prod-only example):
 
 ```bash
-helm upgrade --install bookverse-dev charts/platform \
-  -n bookverse-dev --create-namespace \
-  -f charts/platform/values.yaml -f charts/platform/values-dev.yaml
+helm upgrade --install bookverse charts/platform \
+  -n bookverse --create-namespace \
+  -f charts/platform/values.yaml -f charts/platform/values-prod.yaml
 ```
 
 Set a new platform version:
 
 ```bash
-# Update all env value files to the desired tag
-# e.g., dev
-sed -i '' 's/platform:\n  version: ".*"/platform:\n  version: "dev-2025-09-06"/' charts/platform/values-dev.yaml
+# Update prod values
+sed -i '' 's/platform:\n  version: ".*"/platform:\n  version: "2025-09-06"/' charts/platform/values-prod.yaml
 ```
 
 ## Ingress
@@ -52,8 +51,8 @@ sed -i '' 's/platform:\n  version: ".*"/platform:\n  version: "dev-2025-09-06"/'
 
 ## Environments
 
-- Environment overlays are provided: `values-dev.yaml`, `values-qa.yaml`, `values-staging.yaml`, `values-prod.yaml`.
-- Argo CD Applications in `bookverse-demo-assets/gitops/apps/*/platform.yaml` reference this chart and corresponding value files.
+- This demo uses a PROD-only overlay: `values-prod.yaml`.
+- Argo CD Applications reference this chart with `values-prod.yaml` only.
 
 ## Notes
 
