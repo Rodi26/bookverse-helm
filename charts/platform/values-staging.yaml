@@ -1,38 +1,32 @@
 global:
-  imageRegistry: "evidencetrial.jfrog.io"
-
+  imageRegistry: evidencetrial.jfrog.io
 platform:
-  version: "staging"
-
+  version: 2.1.20
 web:
-  repository: "evidencetrial.jfrog.io/bookverse-web-internal-docker-nonprod-local/web"
-  tag: ""
+  repository: evidencetrial.jfrog.io/bookverse-web-internal-docker-nonprod-local/web
+  tag: ''
   env:
-    BOOKVERSE_ENV: "STAGING"
-    INVENTORY_BASE_URL: "http://inventory"
-    RECOMMENDATIONS_BASE_URL: "http://recommendations"
-    CHECKOUT_BASE_URL: "http://checkout"
+    BOOKVERSE_ENV: STAGING
+    INVENTORY_BASE_URL: http://inventory
+    RECOMMENDATIONS_BASE_URL: http://recommendations
+    CHECKOUT_BASE_URL: http://checkout
   ingress:
     enabled: true
-    className: ""
-    host: "web.staging.bookverse.local"
+    className: ''
+    host: web.staging.bookverse.local
     annotations: {}
     tls:
       enabled: false
-      secretName: ""
-
+      secretName: ''
 inventory:
-  repository: "evidencetrial.jfrog.io/bookverse-inventory-internal-docker-nonprod-local/inventory"
-  tag: ""
-
+  repository: evidencetrial.jfrog.io/bookverse-inventory-internal-docker-nonprod-local/inventory
+  tag: ''
 recommendations:
-  repository: "evidencetrial.jfrog.io/bookverse-recommendations-internal-docker-nonprod-local/recommendations-api"
-  tag: ""
+  repository: evidencetrial.jfrog.io/bookverse-recommendations-internal-docker-nonprod-local/recommendations-api
+  tag: ''
   worker:
-    repository: "evidencetrial.jfrog.io/bookverse-recommendations-internal-docker-nonprod-local/recommendations-worker"
-    tag: ""
-
+    repository: evidencetrial.jfrog.io/bookverse-recommendations-internal-docker-nonprod-local/recommendations-worker
+    tag: ''
 checkout:
-  repository: "evidencetrial.jfrog.io/bookverse-checkout-internal-docker-nonprod-local/checkout"
-  tag: ""
-
+  repository: evidencetrial.jfrog.io/bookverse-checkout-internal-docker-nonprod-local/checkout
+  tag: ''
