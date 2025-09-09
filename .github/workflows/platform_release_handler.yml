@@ -2,7 +2,13 @@ name: Handle Platform Release Dispatch
 
 on:
   repository_dispatch:
-    types: [platform_release_completed]
+    types: [platform_release_completed, release_completed, platform_release]
+  workflow_dispatch:
+    inputs:
+      platform_version:
+        description: "Platform application version (for manual/testing runs)"
+        required: false
+        type: string
 
 permissions:
   contents: write
@@ -37,14 +43,16 @@ jobs:
         id: resolve
         env:
           PLATFORM_APP: bookverse-platform
-          PLATFORM_VERSION: ${{ github.event.client_payload.platform_version || github.event.client_payload.tag || github.event.client_payload.applicationVersion }}
+          PLATFORM_VERSION: ${{ github.event.client_payload.platform_version || github.event.client_payload.tag || github.event.client_payload.applicationVersion || github.event.client_payload.application_version || github.event.client_payload.data.applicationVersion || github.event.client_payload.data.application_version || github.event.inputs.platform_version }}
         run: |
           python - << 'PY'
           import os, json, urllib.request, urllib.parse
           base=os.environ.get('APPTRUST_BASE_URL','').rstrip('/')
           token=os.environ.get('APPTRUST_ACCESS_TOKEN','')
           app=os.environ['PLATFORM_APP']
-          version=os.environ['PLATFORM_VERSION']
+          version=os.environ.get('PLATFORM_VERSION','')
+          if not version:
+            raise SystemExit('Missing PLATFORM_VERSION in event payload or inputs')
           req=urllib.request.Request(
             url=f"{base}/applications/{urllib.parse.quote(app)}/versions/{urllib.parse.quote(version)}/content",
             headers={"Authorization": f"Bearer {token}", "Accept": "application/json"}
@@ -55,6 +63,11 @@ jobs:
           # write to file for next step
           with open('platform_components.json','w') as f:
             json.dump(data, f)
+          # expose resolved version for later job steps
+          geh = os.environ.get('GITHUB_ENV')
+          if geh:
+            with open(geh,'a',encoding='utf-8') as ef:
+              ef.write(f"RESOLVED_PV={version}\n")
           print("::set-output name=ok::true")
           PY
 
@@ -96,7 +109,7 @@ jobs:
       - name: Commit and push changes
         uses: stefanzweifel/git-auto-commit-action@v5
         with:
-          commit_message: "chore(platform): pin image tags for platform release ${{ github.event.client_payload.platform_version }}"
+          commit_message: "chore(platform): pin image tags for platform release ${{ env.RESOLVED_PV }}"
 
       - name: Helm lint and package
         run: |
