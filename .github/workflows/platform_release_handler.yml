@@ -19,7 +19,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Gate: only process PROD repository_dispatch events
+      - name: "Gate: only process PROD repository_dispatch events"
         run: |
           python - << 'PY'
           import json, os
