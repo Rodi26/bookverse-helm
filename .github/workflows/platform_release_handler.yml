@@ -78,7 +78,7 @@ jobs:
           INPUT_VERSION: ${{ github.event.inputs.platform_version }}
         run: |
           python - << 'PY'
-          import os, json, urllib.request, urllib.parse
+          import os, json, urllib.request, urllib.parse, re
           base=os.environ.get('APPTRUST_BASE_URL','').rstrip('/')
           token=os.environ.get('APPTRUST_ACCESS_TOKEN','')
           app=os.environ.get('PLATFORM_APP','bookverse-platform')
@@ -91,10 +91,27 @@ jobs:
                   cp=ev.get('client_payload') if isinstance(ev.get('client_payload'), dict) else {}
                   if isinstance(cp, dict):
                       data = cp.get('data') if isinstance(cp.get('data'), dict) else {}
-                      version = data.get('application_version') or cp.get('platform_version') or cp.get('application_version') or version
+                      # Support snake_case and camelCase keys
+                      version = (
+                          data.get('application_version')
+                          or data.get('applicationVersion')
+                          or cp.get('platform_version')
+                          or cp.get('platformVersion')
+                          or cp.get('application_version')
+                          or cp.get('applicationVersion')
+                          or version
+                      )
                   if not version:
                       top=ev.get('data') if isinstance(ev.get('data'), dict) else {}
-                      version = (top.get('application_version') if isinstance(top, dict) else None) or ev.get('platform_version') or ev.get('application_version') or version
+                      version = (
+                          (top.get('application_version') if isinstance(top, dict) else None)
+                          or (top.get('applicationVersion') if isinstance(top, dict) else None)
+                          or ev.get('platform_version')
+                          or ev.get('platformVersion')
+                          or ev.get('application_version')
+                          or ev.get('applicationVersion')
+                          or version
+                      )
               except Exception:
                   pass
           if not base or not token:
@@ -127,10 +144,23 @@ jobs:
                   candidates = payload.get('results') or payload.get('data') or payload.get('items') or payload.get('versions') or []
               else:
                   candidates = payload
-              if not candidates:
-                  raise SystemExit('Unable to resolve latest platform version from AppTrust')
-              first = candidates[0]
-              version = str(first.get('version') or first.get('name') or '')
+              # Pick first candidate with a valid version string according to allowed format
+              def pick_valid(cands):
+                  pattern = re.compile(r'^[A-Za-z0-9_][A-Za-z0-9_.\-+]*$')
+                  for it in (cands or []):
+                      val = it.get('version') or it.get('name') or ''
+                      if val is None:
+                          continue
+                      v = str(val).strip()
+                      if not v or v == '<no value>':
+                          continue
+                      if not pattern.match(v):
+                          continue
+                      return v
+                  return ''
+              version = pick_valid(candidates)
+              if not version:
+                  raise SystemExit('Unable to resolve a valid platform version from AppTrust')
           if not version:
               raise SystemExit('Missing PLATFORM_VERSION (payload or fallback)')
           url=f"{base}/applications/{urllib.parse.quote(app)}/versions/{urllib.parse.quote(version)}/content"
