@@ -2,7 +2,7 @@ name: Update K8s
 
 on:
   repository_dispatch:
-    types: [update_k8s, release_completed, platform_release_completed, release_complete]
+    types: [release_completed]
   workflow_dispatch:
     inputs:
       platform_version:
@@ -23,6 +23,16 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: "Debug: Dump full repository_dispatch event"
+        if: github.event_name == 'repository_dispatch' && github.event.action == 'release_completed'
+        run: |
+          echo "### Full repository_dispatch event" >> "$GITHUB_STEP_SUMMARY"
+          echo '```json' >> "$GITHUB_STEP_SUMMARY"
+          cat "$GITHUB_EVENT_PATH" >> "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+          echo "Full repository_dispatch event:"
+          cat "$GITHUB_EVENT_PATH"
+
       - name: "Gate: only process PROD repository_dispatch events"
         run: |
           python - << 'PY'
@@ -39,17 +49,53 @@ jobs:
             if not stage:
               top = (data.get('data') or {})
               stage = (top.get('stage') if isinstance(top, dict) else '') or data.get('stage') or ''
-            # Treat these dispatch types as PROD by default if stage missing
-            if not stage:
-              act=str(action).lower()
-              if act in ('update_k8s','release_completed','platform_release_completed','release_complete'):
-                stage='PROD'
-          if event_name!='repository_dispatch' or str(stage).lower()!='prod':
-            with open(os.environ['GITHUB_ENV'],'a') as f:
-              f.write('SKIP=true\n')
-            print(f"Skipping: event={event_name}, action={action!r}, stage={stage!r}")
+            # Default to PROD for JFrog release_completed if stage missing
+            if not stage and str(action).lower()=='release_completed':
+              stage='PROD'
+            if str(stage).lower()!='prod':
+              with open(os.environ['GITHUB_ENV'],'a') as f:
+                f.write('SKIP=true\n')
+              print(f"Skipping repository_dispatch: action={action!r}, stage={stage!r}")
+            else:
+              print("Proceeding: repository_dispatch for PROD")
           else:
-            print("Proceeding: repository_dispatch for PROD")
+            # Allow non-dispatch events (e.g., manual workflow_dispatch)
+            print(f"Proceeding: non-dispatch event={event_name}")
+          PY
+
+      - name: Add webhook payload to job summary
+        if: env.SKIP != 'true' && github.event_name == 'repository_dispatch' && github.event.action == 'release_completed'
+        run: |
+          python - << 'PY'
+          import os, json
+          path=os.environ.get('GITHUB_EVENT_PATH')
+          summary=os.environ.get('GITHUB_STEP_SUMMARY','')
+          data={}
+          if path and os.path.exists(path):
+              try:
+                  with open(path, 'r', encoding='utf-8') as f:
+                      data=json.load(f)
+              except Exception as e:
+                  data={"error": f"failed to load event payload: {e}"}
+          body={}
+          if isinstance(data, dict):
+              cp=data.get('client_payload')
+              if isinstance(cp, dict):
+                  if isinstance(cp.get('data'), dict):
+                      body = cp.get('data')
+                  else:
+                      body = cp
+              if not body:
+                  if isinstance(data.get('data'), dict):
+                      body=data.get('data')
+                  else:
+                      body=data
+          lines=["### Webhook payload","","```json", json.dumps(body, indent=2, ensure_ascii=False), "```",""]
+          if summary:
+              with open(summary, 'a', encoding='utf-8') as f:
+                  f.write("\n".join(lines))
+          else:
+              print("\n".join(lines))
           PY
 
       - name: Derive AppTrust context
