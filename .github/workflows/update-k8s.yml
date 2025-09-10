@@ -2,7 +2,17 @@ name: Update K8s
 
 on:
   repository_dispatch:
-    types: [release_completed]
+    types: [update_k8s, release_completed, platform_release_completed, release_complete]
+  workflow_dispatch:
+    inputs:
+      platform_version:
+        description: 'Platform version to pin (optional)'
+        required: false
+        type: string
+      build_number:
+        description: 'Optional build number fallback'
+        required: false
+        type: string
 
 permissions:
   contents: write
@@ -29,9 +39,11 @@ jobs:
             if not stage:
               top = (data.get('data') or {})
               stage = (top.get('stage') if isinstance(top, dict) else '') or data.get('stage') or ''
-            # Release events imply PROD by definition
-            if not stage and str(action).lower()=='release_completed':
-              stage='PROD'
+            # Treat these dispatch types as PROD by default if stage missing
+            if not stage:
+              act=str(action).lower()
+              if act in ('update_k8s','release_completed','platform_release_completed','release_complete'):
+                stage='PROD'
           if event_name!='repository_dispatch' or str(stage).lower()!='prod':
             with open(os.environ['GITHUB_ENV'],'a') as f:
               f.write('SKIP=true\n')
@@ -41,7 +53,7 @@ jobs:
           PY
 
       - name: Derive AppTrust context
-        if: ${{ env.SKIP != 'true' }}
+        if: env.SKIP != 'true'
         env:
           JFROG_URL: ${{ vars.JFROG_URL }}
           JFROG_TOKEN: ${{ secrets.JFROG_ADMIN_TOKEN || secrets.JFROG_ACCESS_TOKEN }}
@@ -53,19 +65,19 @@ jobs:
           echo "APPTRUST_ACCESS_TOKEN=${JFROG_TOKEN}" >> "$GITHUB_ENV"
 
       - name: Set up Python
-        if: ${{ env.SKIP != 'true' }}
+        if: env.SKIP != 'true'
         uses: actions/setup-python@v5
         with:
           python-version: '3.11'
 
       - name: Install dependencies
-        if: ${{ env.SKIP != 'true' }}
+        if: env.SKIP != 'true'
         run: |
           python -m pip install --upgrade pip
           pip install PyYAML
 
       - name: Resolve platform components from AppTrust
-        if: ${{ env.SKIP != 'true' }}
+        if: env.SKIP != 'true'
         id: resolve
         env:
           PLATFORM_APP: bookverse-platform
@@ -199,7 +211,7 @@ jobs:
           PY
 
       - name: Pin image tags in values.yaml
-        if: ${{ env.SKIP != 'true' }}
+        if: env.SKIP != 'true'
         run: |
           python - << 'PY'
           import json, yaml
@@ -236,20 +248,27 @@ jobs:
           PY
 
       - name: Commit and push changes
-        if: ${{ env.SKIP != 'true' }}
-        uses: stefanzweifel/git-auto-commit-action@v5
-        with:
-          commit_message: "chore(platform): pin versions for platform release ${{ env.RESOLVED_PV }}"
-          file_pattern: charts/platform/values.yaml platform_components.json
+        if: env.SKIP != 'true'
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add charts/platform/values.yaml platform_components.json || true
+          if git diff --cached --quiet; then
+            echo "No changes to commit"
+            exit 0
+          fi
+          msg="chore(platform): update k8s pins for platform ${RESOLVED_PV}"
+          git commit -m "$msg"
+          git push
 
       - name: Setup Helm
-        if: ${{ env.SKIP != 'true' }}
+        if: env.SKIP != 'true'
         uses: azure/setup-helm@v4
         with:
           version: v3.14.4
 
       - name: Helm lint and package
-        if: ${{ env.SKIP != 'true' }}
+        if: env.SKIP != 'true'
         run: |
           helm lint charts/platform
           mkdir -p dist
@@ -261,6 +280,8 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Summarize pinned image tags
+        env:
+          SKIP: ${{ needs.pin_and_package.outputs.SKIP || '' }}
         run: |
           python - << 'PY'
           import os, yaml
@@ -293,3 +314,5 @@ jobs:
           else:
               print("\n".join(body))
           PY
+
+
