@@ -217,7 +217,8 @@ jobs:
         run: |
           set -euo pipefail
           echo "Fetching platform content for ${APPTRUST_APPLICATION}@${RESOLVED_PV}"
-          curl -sSf -H "Authorization: Bearer ${JFROG_ACCESS_TOKEN}" -H "Accept: application/json" \
+          # Do not use -f so we can capture error JSON bodies for summary/debug
+          curl -sS -H "Authorization: Bearer ${JFROG_ACCESS_TOKEN}" -H "Accept: application/json" \
             "${JFROG_URL%/}/apptrust/api/v1/applications/${APPTRUST_APPLICATION}/versions/${RESOLVED_PV}/content?include=releasables,sources" \
             -o platform_components.json
 
@@ -226,15 +227,18 @@ jobs:
         run: |
           python - << 'PY'
           import json, yaml, os
-          # Load and normalize platform content (can be dict or list)
-          with open('platform_components.json', 'r', encoding='utf-8') as f:
-              raw = json.load(f)
+          # Load content and normalize shapes
+          try:
+              with open('platform_components.json', 'r', encoding='utf-8') as f:
+                  raw = json.load(f)
+          except Exception:
+              raw = {}
+          comp = raw if isinstance(raw, dict) else {}
+          releasables = []
           if isinstance(raw, list):
-              comp = {'releasables': raw}
-          elif isinstance(raw, dict):
-              comp = raw
-          else:
-              comp = {}
+              releasables = raw
+          elif isinstance(comp.get('releasables'), list):
+              releasables = comp.get('releasables')
 
           # Known app->values key mapping
           app_to_values_key={
@@ -252,7 +256,7 @@ jobs:
 
           # 1) Extract component versions from sources.versions (preferred for app keys)
           versions_by_app={}
-          src=(((comp or {}).get('sources') or {}).get('versions')) if isinstance(comp, dict) else None
+          src=((comp.get('sources') or {}).get('versions')) if isinstance(comp, dict) else None
           if isinstance(src, list):
               for entry in src:
                   ak = coalesce_keys(entry, 'application_key','applicationKey','application') or ''
@@ -262,9 +266,8 @@ jobs:
 
           # 2) Extract versions by service name from releasables (authoritative for image tags)
           versions_by_service={}
-          rel = ((comp or {}).get('releasables')) if isinstance(comp, dict) else []
-          if isinstance(rel, list):
-              for item in rel:
+          if isinstance(releasables, list):
+              for item in releasables:
                   if not isinstance(item, dict):
                       continue
                   if item.get('package_type') != 'docker' or item.get('releasable_type') != 'package_version':
@@ -276,9 +279,9 @@ jobs:
 
           # Helper to write tags into values
           def update_file(path):
-            y=yaml.safe_load(open(path))
+            y=yaml.safe_load(open(path)) or {}
             # Set platform version if present in content
-            plat_ver = coalesce_keys(comp, 'version','platform_version')
+            plat_ver = coalesce_keys(comp, 'version','platform_version') if isinstance(comp, dict) else None
             if plat_ver is not None:
                 y.setdefault('platform', {})['version']=str(plat_ver)
 
@@ -410,22 +413,21 @@ jobs:
                   raw = json.load(f)
           except Exception:
               raw = {}
+          comp = raw if isinstance(raw, dict) else {}
+          releasables = []
           if isinstance(raw, list):
-              comp = {'releasables': raw}
-          elif isinstance(raw, dict):
-              comp = raw
-          else:
-              comp = {}
-          src = (((comp or {}).get('sources') or {}).get('versions')) if isinstance(comp, dict) else None
+              releasables = raw
+          elif isinstance(comp.get('releasables'), list):
+              releasables = comp.get('releasables')
+          src = ((comp.get('sources') or {}).get('versions')) if isinstance(comp, dict) else None
           if isinstance(src, list):
               for entry in src:
                   ak = coalesce(entry, 'application_key','applicationKey','application')
                   ver = coalesce(entry, 'application_version','applicationVersion','version')
                   if ak and ver:
                       versions_by_app[str(ak)] = str(ver)
-          rel = ((comp or {}).get('releasables')) if isinstance(comp, dict) else []
-          if isinstance(rel, list):
-              for item in rel:
+          if isinstance(releasables, list):
+              for item in releasables:
                   if not isinstance(item, dict):
                       continue
                   if item.get('package_type') != 'docker' or item.get('releasable_type') != 'package_version':
