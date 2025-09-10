@@ -64,46 +64,20 @@ jobs:
 
       # (Removed payload summary here; a concise summary is produced in summarize_pins.)
 
-      - name: Derive AppTrust context
+      - name: Setup JFrog CLI (OIDC)
+        if: env.SKIP != 'true'
+        uses: EyalDelarea/setup-jfrog-cli@swampUpAppTrust
+        with:
+          version: latest
+
+      - name: Configure JFrog CLI
         if: env.SKIP != 'true'
         env:
           JFROG_URL: ${{ vars.JFROG_URL }}
-          OIDC_PROVIDER_NAME: ${{ vars.JF_OIDC_PROVIDER_NAME || 'github-oidc' }}
-          OIDC_AUDIENCE: ${{ vars.JF_OIDC_AUDIENCE || 'bookverse-github-actions' }}
         run: |
-          set -euo pipefail
-          BASE="${JFROG_URL%/}"
-          if [[ -z "${BASE}" ]]; then echo "Missing vars.JFROG_URL" >&2; exit 1; fi
-          echo "APPTRUST_BASE_URL=${BASE}/apptrust/api/v1" >> "$GITHUB_ENV"
-          # Mint GitHub OIDC ID token
-          echo "Minting GitHub OIDC ID token for audience=${OIDC_AUDIENCE}"
-          REQ_URL="$ACTIONS_ID_TOKEN_REQUEST_URL"
-          if [[ "$REQ_URL" == *"?"* || "$REQ_URL" == *"&"* || "$REQ_URL" == *"?*"* ]]; then
-            REQ_URL="${REQ_URL}&audience=${OIDC_AUDIENCE}"
-          else
-            REQ_URL="${REQ_URL}?audience=${OIDC_AUDIENCE}"
-          fi
-          http_code=$(curl -sS -o /tmp/idtoken.json -w "%{http_code}" \
-            -H "Authorization: bearer $ACTIONS_ID_TOKEN_REQUEST_TOKEN" \
-            -H "Accept: application/json" \
-            "$REQ_URL")
-          if [[ "$http_code" != "200" ]]; then
-            echo "Failed to obtain OIDC ID token: HTTP ${http_code}" >&2
-            (head -c 500 /tmp/idtoken.json || true) >&2
-            exit 1
-          fi
-          ID_TOKEN=$(jq -r '.value // empty' /tmp/idtoken.json)
-          if [[ -z "${ID_TOKEN}" || "${ID_TOKEN}" == "null" ]]; then
-            echo "Failed to obtain OIDC ID token: empty value" >&2; exit 1
-          fi
-          # Exchange OIDC ID token for JFrog access token
-          EXCHANGE_PAYLOAD=$(jq -n --arg pn "$OIDC_PROVIDER_NAME" --arg tok "$ID_TOKEN" --arg aud "$OIDC_AUDIENCE" '{provider_name:$pn, subject_token:$tok, subject_issuer:"https://token.actions.githubusercontent.com", audience:$aud}')
-          RESP=$(curl -fsSL -X POST "$BASE/access/api/v1/oidc/token" -H "Content-Type: application/json" -d "$EXCHANGE_PAYLOAD")
-          APPTRUST_ACCESS_TOKEN=$(echo "$RESP" | jq -er '.access_token // empty' || true)
-          if [[ -z "${APPTRUST_ACCESS_TOKEN}" ]]; then
-            echo "Failed to exchange OIDC token for JFrog access token: $RESP" >&2; exit 1
-          fi
-          echo "APPTRUST_ACCESS_TOKEN=${APPTRUST_ACCESS_TOKEN}" >> "$GITHUB_ENV"
+          jf c add --interactive=false --url "${JFROG_URL}" --access-token ""
+          jf c show
+          jf rt ping
 
       - name: Set up Python
         if: env.SKIP != 'true'
@@ -117,16 +91,14 @@ jobs:
           python -m pip install --upgrade pip
           pip install PyYAML
 
-      - name: Resolve platform components from AppTrust
+      - name: Resolve platform version
         if: env.SKIP != 'true'
         id: resolve
         env:
           PLATFORM_APP: bookverse-platform
         run: |
           python - << 'PY'
-          import os, json, urllib.request, urllib.parse, re
-          base=os.environ.get('APPTRUST_BASE_URL','').rstrip('/')
-          token=os.environ.get('APPTRUST_ACCESS_TOKEN','')
+          import os, json, re, subprocess, shlex
           app=os.environ.get('PLATFORM_APP','bookverse-platform')
           version=''
           # Try resolve from repository_dispatch payload
@@ -181,32 +153,21 @@ jobs:
               if _v == '<no value>' or not _pat.match(_v):
                   print(f"INFO: Ignoring invalid platform version from payload: {_v!r}")
                   version = ''
-          if not base or not token:
-              raise SystemExit('Missing AppTrust base URL or token')
           if not version:
               # Fallback: try latest RELEASED; if that fails, try latest regardless of status
-              import urllib.error
-              def fetch_versions(url: str):
-                  req=urllib.request.Request(url, headers={"Authorization": f"Bearer {token}", "Accept": "application/json"})
+              def jf_rt_get(path: str):
                   try:
-                      with urllib.request.urlopen(req, timeout=30) as resp:
-                          raw = resp.read().decode('utf-8') or '[]'
+                      out = subprocess.check_output(shlex.split(f"jf rt curl -H Accept:application/json '{path}'"), stderr=subprocess.STDOUT)
+                      txt = out.decode('utf-8','ignore')
                       try:
-                          return json.loads(raw)
+                          return json.loads(txt)
                       except Exception:
-                          return []
-                  except urllib.error.HTTPError as e:
-                      body = ''
-                      try:
-                          body = e.read().decode('utf-8', 'ignore')
-                      except Exception:
-                          pass
-                      print(f"WARN: versions query failed {e.code} for {url} -> {body[:300]}")
-                      return []
-              base_url=f"{base}/applications/{urllib.parse.quote(app)}/versions?limit=1"
-              payload = fetch_versions(base_url + "&release_status=RELEASED")
-              if not payload:
-                  payload = fetch_versions(base_url)
+                          return {}
+                  except subprocess.CalledProcessError as e:
+                      print(f"WARN: jf rt curl failed: {e.output.decode('utf-8','ignore')[:300]}")
+                      return {}
+              payload = jf_rt_get(f"/apptrust/api/v1/applications/{app}/versions?limit=1&release_status=RELEASED") or \
+                        jf_rt_get(f"/apptrust/api/v1/applications/{app}/versions?limit=1")
               if isinstance(payload, dict):
                   candidates = payload.get('results') or payload.get('data') or payload.get('items') or payload.get('versions') or []
               else:
@@ -228,28 +189,22 @@ jobs:
               version = pick_valid(candidates)
               if not version:
                   raise SystemExit('Unable to resolve a valid platform version from AppTrust')
-          if not version:
-              raise SystemExit('Missing PLATFORM_VERSION (payload or fallback)')
-          url=f"{base}/applications/{urllib.parse.quote(app)}/versions/{urllib.parse.quote(version)}/content?include=releasables,sources"
-          req=urllib.request.Request(url, headers={"Authorization": f"Bearer {token}", "Accept": "application/json"})
-          try:
-              with urllib.request.urlopen(req, timeout=60) as resp:
-                  data=json.loads(resp.read().decode('utf-8') or '{}')
-          except urllib.error.HTTPError as e:
-              body = ''
-              try:
-                  body = e.read().decode('utf-8', 'ignore')
-              except Exception:
-                  pass
-              raise SystemExit(f"Failed to fetch platform content for version {version}: {e.code} {body[:300]}")
-          with open('platform_components.json','w', encoding='utf-8') as f:
-              json.dump(data, f)
           geh = os.environ.get('GITHUB_ENV')
           if geh:
               with open(geh, 'a', encoding='utf-8') as ef:
                   ef.write(f"RESOLVED_PV={version}\n")
+                  ef.write(f"APPTRUST_APPLICATION={app}\n")
           print(f"Resolved platform version: {version}")
           PY
+
+      - name: Fetch platform content from AppTrust (OIDC via JFrog CLI)
+        if: env.SKIP != 'true'
+        run: |
+          set -euo pipefail
+          echo "Fetching platform content for ${APPTRUST_APPLICATION}@${RESOLVED_PV}"
+          jf rt curl -H "Accept: application/json" \
+            "/apptrust/api/v1/applications/${APPTRUST_APPLICATION}/versions/${RESOLVED_PV}/content?include=releasables,sources" \
+            > platform_components.json
 
       - name: Pin image tags in values.yaml
         if: env.SKIP != 'true'
