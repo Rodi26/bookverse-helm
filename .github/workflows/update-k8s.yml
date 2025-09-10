@@ -226,7 +226,15 @@ jobs:
         run: |
           python - << 'PY'
           import json, yaml, os
-          comp=json.load(open('platform_components.json'))
+          # Load and normalize platform content (can be dict or list)
+          with open('platform_components.json', 'r', encoding='utf-8') as f:
+              raw = json.load(f)
+          if isinstance(raw, list):
+              comp = {'releasables': raw}
+          elif isinstance(raw, dict):
+              comp = raw
+          else:
+              comp = {}
 
           # Known app->values key mapping
           app_to_values_key={
@@ -244,7 +252,7 @@ jobs:
 
           # 1) Extract component versions from sources.versions (preferred for app keys)
           versions_by_app={}
-          src=(((comp or {}).get('sources') or {}).get('versions'))
+          src=(((comp or {}).get('sources') or {}).get('versions')) if isinstance(comp, dict) else None
           if isinstance(src, list):
               for entry in src:
                   ak = coalesce_keys(entry, 'application_key','applicationKey','application') or ''
@@ -254,7 +262,7 @@ jobs:
 
           # 2) Extract versions by service name from releasables (authoritative for image tags)
           versions_by_service={}
-          rel = (comp or {}).get('releasables')
+          rel = ((comp or {}).get('releasables')) if isinstance(comp, dict) else []
           if isinstance(rel, list):
               for item in rel:
                   if not isinstance(item, dict):
@@ -398,17 +406,24 @@ jobs:
           versions_by_app = {}
           versions_by_service = {}
           try:
-              comp = json.load(open('platform_components.json'))
+              with open('platform_components.json','r',encoding='utf-8') as f:
+                  raw = json.load(f)
           except Exception:
+              raw = {}
+          if isinstance(raw, list):
+              comp = {'releasables': raw}
+          elif isinstance(raw, dict):
+              comp = raw
+          else:
               comp = {}
-          src = (((comp or {}).get('sources') or {}).get('versions'))
+          src = (((comp or {}).get('sources') or {}).get('versions')) if isinstance(comp, dict) else None
           if isinstance(src, list):
               for entry in src:
                   ak = coalesce(entry, 'application_key','applicationKey','application')
                   ver = coalesce(entry, 'application_version','applicationVersion','version')
                   if ak and ver:
                       versions_by_app[str(ak)] = str(ver)
-          rel = (comp or {}).get('releasables')
+          rel = ((comp or {}).get('releasables')) if isinstance(comp, dict) else []
           if isinstance(rel, list):
               for item in rel:
                   if not isinstance(item, dict):
