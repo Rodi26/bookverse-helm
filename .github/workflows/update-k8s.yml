@@ -227,7 +227,7 @@ jobs:
                       return obj[k]
               return None
 
-          # 1) Extract component versions from sources.versions (preferred)
+          # 1) Extract component versions from sources.versions (preferred for app keys)
           versions_by_app={}
           src=(((comp or {}).get('sources') or {}).get('versions'))
           if isinstance(src, list):
@@ -237,25 +237,19 @@ jobs:
                   if ak and ver:
                       versions_by_app[str(ak)]=str(ver)
 
-          # 2) Also try to derive versions from releasables when available
-          #    Many systems annotate each releasable with application_key and version
+          # 2) Extract versions by service name from releasables (authoritative for image tags)
+          versions_by_service={}
           rel = (comp or {}).get('releasables')
           if isinstance(rel, list):
               for item in rel:
-                  props = coalesce_keys(item, 'properties','props','metadata','attributes') or {}
-                  if not isinstance(props, dict):
-                      props = {}
-                  ak = (
-                      coalesce_keys(item, 'application_key','applicationKey')
-                      or coalesce_keys(props, 'application_key','applicationKey')
-                      or ''
-                  )
-                  ver = (
-                      coalesce_keys(item, 'application_version','applicationVersion','version')
-                      or coalesce_keys(props, 'application_version','applicationVersion','version','docker.tag','image_tag')
-                  )
-                  if ak and ver and ak not in versions_by_app:
-                      versions_by_app[str(ak)] = str(ver)
+                  if not isinstance(item, dict):
+                      continue
+                  if item.get('package_type') != 'docker' or item.get('releasable_type') != 'package_version':
+                      continue
+                  name = str(item.get('name') or '').strip()
+                  ver = str(item.get('version') or '').strip()
+                  if name and ver:
+                      versions_by_service[name] = ver
 
           # Helper to write tags into values
           def update_file(path):
@@ -265,19 +259,41 @@ jobs:
             if plat_ver is not None:
                 y.setdefault('platform', {})['version']=str(plat_ver)
 
-            # Map app->values keys (top-level services)
-            decisions = []
-            for app_key, values_key in app_to_values_key.items():
-                ver = versions_by_app.get(app_key)
+            # Apply service-name versions (preferred)
+            name_map = {
+              'web': ('web', None),
+              'inventory': ('inventory', None),
+              'recommendations': ('recommendations', None),
+              'checkout': ('checkout', None),
+              'recommendations-worker': ('recommendations', 'worker'),
+            }
+            for svc_name, (root, child) in name_map.items():
+                ver = versions_by_service.get(svc_name)
                 if ver:
-                    y.setdefault(values_key, {})['tag']=str(ver)
-                    decisions.append(f"{values_key} <- {app_key}:{ver}")
+                    if child:
+                        y.setdefault(root, {}).setdefault(child, {})['tag']=str(ver)
+                    else:
+                        y.setdefault(root, {})['tag']=str(ver)
 
-            # Special case: recommendations.worker uses same app version unless a specific worker version exists
-            rec_ver = versions_by_app.get('bookverse-recommendations')
-            if rec_ver:
-                y.setdefault('recommendations', {}).setdefault('worker', {})['tag']=str(rec_ver)
-                decisions.append(f"recommendations.worker <- bookverse-recommendations:{rec_ver}")
+            # Fallback: Map app keys to values keys if service-name mapping missing
+            for app_key, values_key in app_to_values_key.items():
+                if values_key == 'recommendations':
+                    # top-level recommendations
+                    if not ((y.get('recommendations') or {}).get('tag')):
+                        ver = versions_by_app.get(app_key)
+                        if ver:
+                            y.setdefault('recommendations', {})['tag']=str(ver)
+                    # nested worker, only if not already set
+                    if not (((y.get('recommendations') or {}).get('worker') or {}).get('tag')):
+                        verw = versions_by_service.get('recommendations-worker') or versions_by_app.get(app_key)
+                        if verw:
+                            y.setdefault('recommendations', {}).setdefault('worker', {})['tag']=str(verw)
+                    continue
+                # other services
+                if not ((y.get(values_key) or {}).get('tag')):
+                    ver = versions_by_app.get(app_key)
+                    if ver:
+                        y.setdefault(values_key, {})['tag']=str(ver)
 
             with open(path,'w') as f:
                 yaml.safe_dump(y, f, sort_keys=False)
@@ -360,11 +376,12 @@ jobs:
               payload={
                   'application_key': data.get('application_key') or data.get('applicationKey') or cp.get('application_key') or cp.get('applicationKey') or '',
                   'application_version': data.get('application_version') or data.get('applicationVersion') or cp.get('application_version') or cp.get('applicationVersion') or '',
-                  'stage': data.get('stage') or cp.get('stage') or ev.get('stage') or ''
+                  'stage': (data.get('stage') or cp.get('stage') or ev.get('stage') or '').lower()
               }
 
           # 2) Extracted component versions from platform_components.json
           versions_by_app = {}
+          versions_by_service = {}
           try:
               comp = json.load(open('platform_components.json'))
           except Exception:
@@ -379,13 +396,14 @@ jobs:
           rel = (comp or {}).get('releasables')
           if isinstance(rel, list):
               for item in rel:
-                  props = coalesce(item, 'properties','props','metadata','attributes') or {}
-                  if not isinstance(props, dict):
-                      props = {}
-                  ak = coalesce(item, 'application_key','applicationKey') or coalesce(props, 'application_key','applicationKey')
-                  ver = coalesce(item, 'application_version','applicationVersion','version') or coalesce(props, 'application_version','applicationVersion','version','docker.tag','image_tag')
-                  if ak and ver and ak not in versions_by_app:
-                      versions_by_app[str(ak)] = str(ver)
+                  if not isinstance(item, dict):
+                      continue
+                  if item.get('package_type') != 'docker' or item.get('releasable_type') != 'package_version':
+                      continue
+                  name = str(item.get('name') or '').strip()
+                  ver = str(item.get('version') or '').strip()
+                  if name and ver:
+                      versions_by_service[name] = ver
 
           # 3) Pinned tags from values.yaml
           y = read_yaml('charts/platform/values.yaml')
@@ -401,7 +419,10 @@ jobs:
           sections.append("""```json\n%s\n```""" % json.dumps(payload, indent=2, ensure_ascii=False))
 
           sections.append("### Extracted components")
-          if versions_by_app:
+          if versions_by_service:
+              for k in sorted(versions_by_service.keys()):
+                  sections.append(f"- {k}: {versions_by_service[k]}")
+          elif versions_by_app:
               for k in sorted(versions_by_app.keys()):
                   sections.append(f"- {k}: {versions_by_app[k]}")
           else:
