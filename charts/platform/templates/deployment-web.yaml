@@ -14,7 +14,7 @@ spec:
     spec:
       containers:
         - name: web
-          image: {{ default "" .Values.web.repository }}:{{ coalesce .Values.web.tag .Values.platform.version .Chart.AppVersion "latest" }}
+          image: {{ printf "%s:%s" (default "" .Values.web.repository) (required "web.tag is required" .Values.web.tag) }}
           ports:
             - containerPort: {{ .Values.web.port }}
           readinessProbe:

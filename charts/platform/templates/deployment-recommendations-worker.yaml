@@ -15,7 +15,7 @@ spec:
     spec:
       containers:
         - name: recommendations-worker
-          image: {{ default "" .Values.recommendations.worker.repository }}:{{ coalesce .Values.recommendations.worker.tag .Values.platform.version .Chart.AppVersion "latest" }}
+          image: {{ printf "%s:%s" (default "" .Values.recommendations.worker.repository) (required "recommendations.worker.tag is required" .Values.recommendations.worker.tag) }}
           env:
             - name: INVENTORY_BASE_URL
               value: {{ quote .Values.recommendations.env.INVENTORY_BASE_URL }}

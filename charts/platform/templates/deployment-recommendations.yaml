@@ -14,7 +14,7 @@ spec:
     spec:
       containers:
         - name: recommendations
-          image: {{ default "" .Values.recommendations.repository }}:{{ coalesce .Values.recommendations.tag .Values.platform.version .Chart.AppVersion "latest" }}
+          image: {{ printf "%s:%s" (default "" .Values.recommendations.repository) (required "recommendations.tag is required" .Values.recommendations.tag) }}
           ports:
             - containerPort: {{ .Values.recommendations.port }}
           env:

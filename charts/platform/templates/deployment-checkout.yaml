@@ -14,7 +14,7 @@ spec:
     spec:
       containers:
         - name: checkout
-          image: {{ default "" .Values.checkout.repository }}:{{ coalesce .Values.checkout.tag .Values.platform.version .Chart.AppVersion "latest" }}
+          image: {{ printf "%s:%s" (default "" .Values.checkout.repository) (required "checkout.tag is required" .Values.checkout.tag) }}
           ports:
             - containerPort: {{ .Values.checkout.port }}
           env:
