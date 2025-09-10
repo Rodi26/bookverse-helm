@@ -77,12 +77,24 @@ jobs:
           echo "APPTRUST_BASE_URL=${BASE}/apptrust/api/v1" >> "$GITHUB_ENV"
           # Mint GitHub OIDC ID token
           echo "Minting GitHub OIDC ID token for audience=${OIDC_AUDIENCE}"
-          ID_TOKEN=$(curl -fsSL \
+          REQ_URL="$ACTIONS_ID_TOKEN_REQUEST_URL"
+          if [[ "$REQ_URL" == *"?"* || "$REQ_URL" == *"&"* || "$REQ_URL" == *"?*"* ]]; then
+            REQ_URL="${REQ_URL}&audience=${OIDC_AUDIENCE}"
+          else
+            REQ_URL="${REQ_URL}?audience=${OIDC_AUDIENCE}"
+          fi
+          http_code=$(curl -sS -o /tmp/idtoken.json -w "%{http_code}" \
             -H "Authorization: bearer $ACTIONS_ID_TOKEN_REQUEST_TOKEN" \
             -H "Accept: application/json" \
-            "$ACTIONS_ID_TOKEN_REQUEST_URL&audience=${OIDC_AUDIENCE}" | jq -r '.value')
+            "$REQ_URL")
+          if [[ "$http_code" != "200" ]]; then
+            echo "Failed to obtain OIDC ID token: HTTP ${http_code}" >&2
+            (head -c 500 /tmp/idtoken.json || true) >&2
+            exit 1
+          fi
+          ID_TOKEN=$(jq -r '.value // empty' /tmp/idtoken.json)
           if [[ -z "${ID_TOKEN}" || "${ID_TOKEN}" == "null" ]]; then
-            echo "Failed to obtain OIDC ID token" >&2; exit 1
+            echo "Failed to obtain OIDC ID token: empty value" >&2; exit 1
           fi
           # Exchange OIDC ID token for JFrog access token
           EXCHANGE_PAYLOAD=$(jq -n --arg pn "$OIDC_PROVIDER_NAME" --arg tok "$ID_TOKEN" --arg aud "$OIDC_AUDIENCE" '{provider_name:$pn, subject_token:$tok, subject_issuer:"https://token.actions.githubusercontent.com", audience:$aud}')
