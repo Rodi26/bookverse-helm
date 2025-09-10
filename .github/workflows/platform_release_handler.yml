@@ -231,9 +231,8 @@ jobs:
                     y.setdefault(svc, {})['tag']=str(ver)
             with open(path,'w') as f:
                 yaml.safe_dump(y, f, sort_keys=False)
-          # Update both default and prod values files so ArgoCD environments can consume either
-          for p in ['charts/platform/values.yaml', 'charts/platform/values-prod.yaml']:
-              update_file(p)
+          # Update single values file only
+          update_file('charts/platform/values.yaml')
           PY
 
       - name: Commit and push changes
@@ -241,7 +240,7 @@ jobs:
         uses: stefanzweifel/git-auto-commit-action@v5
         with:
           commit_message: "chore(platform): pin versions for platform release ${{ env.RESOLVED_PV }}"
-          file_pattern: charts/platform/values.yaml charts/platform/values-prod.yaml platform_components.json
+          file_pattern: charts/platform/values.yaml platform_components.json
 
       - name: Setup Helm
         if: ${{ env.SKIP != 'true' }}
@@ -272,7 +271,6 @@ jobs:
               except Exception:
                   return {}
           y = read_yaml('charts/platform/values.yaml')
-          yp = read_yaml('charts/platform/values-prod.yaml')
           def get_tag(doc, svc):
               if svc == 'recommendations.worker':
                   return (((doc.get('recommendations') or {}).get('worker') or {}).get('tag')) or ''
@@ -281,11 +279,10 @@ jobs:
               return ((doc.get(svc) or {}).get('tag')) or ''
           lines = []
           for svc in ['web','inventory','recommendations','checkout','recommendations.worker']:
-              lines.append(f"- {svc}: values={get_tag(y, svc)} | prod={get_tag(yp, svc)}")
+              lines.append(f"- {svc}: tag={get_tag(y, svc)}")
           body = [
               "### Pinned image tags",
-              f"platform.version (values) = {(y.get('platform') or {}).get('version','')}",
-              f"platform.version (prod)   = {(yp.get('platform') or {}).get('version','')}",
+              f"platform.version = {(y.get('platform') or {}).get('version','')}",
               "",
               *lines,
           ]
