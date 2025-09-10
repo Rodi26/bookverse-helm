@@ -1,5 +1,7 @@
 name: Update K8s
 
+run-name: Platform Release ${{ github.event.client_payload.data.application_version }}
+
 on:
   repository_dispatch:
     types: [release_completed]
@@ -16,6 +18,7 @@ on:
 
 permissions:
   contents: write
+  id-token: write
 
 jobs:
   pin_and_package:
@@ -23,14 +26,10 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: "Debug: Dump full repository_dispatch event"
+      - name: "Debug: Log repository_dispatch event (console only)"
         if: github.event_name == 'repository_dispatch' && github.event.action == 'release_completed'
         run: |
-          echo "### Full repository_dispatch event" >> "$GITHUB_STEP_SUMMARY"
-          echo '```json' >> "$GITHUB_STEP_SUMMARY"
-          cat "$GITHUB_EVENT_PATH" >> "$GITHUB_STEP_SUMMARY"
-          echo '```' >> "$GITHUB_STEP_SUMMARY"
-          echo "Full repository_dispatch event:"
+          echo "Full repository_dispatch event (console log):"
           cat "$GITHUB_EVENT_PATH"
 
       - name: "Gate: only process PROD repository_dispatch events"
@@ -63,52 +62,36 @@ jobs:
             print(f"Proceeding: non-dispatch event={event_name}")
           PY
 
-      - name: Add webhook payload to job summary
-        if: env.SKIP != 'true' && github.event_name == 'repository_dispatch' && github.event.action == 'release_completed'
-        run: |
-          python - << 'PY'
-          import os, json
-          path=os.environ.get('GITHUB_EVENT_PATH')
-          summary=os.environ.get('GITHUB_STEP_SUMMARY','')
-          data={}
-          if path and os.path.exists(path):
-              try:
-                  with open(path, 'r', encoding='utf-8') as f:
-                      data=json.load(f)
-              except Exception as e:
-                  data={"error": f"failed to load event payload: {e}"}
-          body={}
-          if isinstance(data, dict):
-              cp=data.get('client_payload')
-              if isinstance(cp, dict):
-                  if isinstance(cp.get('data'), dict):
-                      body = cp.get('data')
-                  else:
-                      body = cp
-              if not body:
-                  if isinstance(data.get('data'), dict):
-                      body=data.get('data')
-                  else:
-                      body=data
-          lines=["### Webhook payload","","```json", json.dumps(body, indent=2, ensure_ascii=False), "```",""]
-          if summary:
-              with open(summary, 'a', encoding='utf-8') as f:
-                  f.write("\n".join(lines))
-          else:
-              print("\n".join(lines))
-          PY
+      # (Removed payload summary here; a concise summary is produced in summarize_pins.)
 
       - name: Derive AppTrust context
         if: env.SKIP != 'true'
         env:
           JFROG_URL: ${{ vars.JFROG_URL }}
-          JFROG_TOKEN: ${{ secrets.JFROG_ADMIN_TOKEN || secrets.JFROG_ACCESS_TOKEN }}
+          OIDC_PROVIDER_NAME: ${{ vars.JF_OIDC_PROVIDER_NAME || 'github-oidc' }}
+          OIDC_AUDIENCE: ${{ vars.JF_OIDC_AUDIENCE || 'bookverse-github-actions' }}
         run: |
+          set -euo pipefail
           BASE="${JFROG_URL%/}"
           if [[ -z "${BASE}" ]]; then echo "Missing vars.JFROG_URL" >&2; exit 1; fi
-          if [[ -z "${JFROG_TOKEN}" ]]; then echo "Missing JFROG token (admin or access)" >&2; exit 1; fi
           echo "APPTRUST_BASE_URL=${BASE}/apptrust/api/v1" >> "$GITHUB_ENV"
-          echo "APPTRUST_ACCESS_TOKEN=${JFROG_TOKEN}" >> "$GITHUB_ENV"
+          # Mint GitHub OIDC ID token
+          echo "Minting GitHub OIDC ID token for audience=${OIDC_AUDIENCE}"
+          ID_TOKEN=$(curl -fsSL \
+            -H "Authorization: bearer $ACTIONS_ID_TOKEN_REQUEST_TOKEN" \
+            -H "Accept: application/json" \
+            "$ACTIONS_ID_TOKEN_REQUEST_URL&audience=${OIDC_AUDIENCE}" | jq -r '.value')
+          if [[ -z "${ID_TOKEN}" || "${ID_TOKEN}" == "null" ]]; then
+            echo "Failed to obtain OIDC ID token" >&2; exit 1
+          fi
+          # Exchange OIDC ID token for JFrog access token
+          EXCHANGE_PAYLOAD=$(jq -n --arg pn "$OIDC_PROVIDER_NAME" --arg tok "$ID_TOKEN" --arg aud "$OIDC_AUDIENCE" '{provider_name:$pn, subject_token:$tok, subject_issuer:"https://token.actions.githubusercontent.com", audience:$aud}')
+          RESP=$(curl -fsSL -X POST "$BASE/access/api/v1/oidc/token" -H "Content-Type: application/json" -d "$EXCHANGE_PAYLOAD")
+          APPTRUST_ACCESS_TOKEN=$(echo "$RESP" | jq -er '.access_token // empty' || true)
+          if [[ -z "${APPTRUST_ACCESS_TOKEN}" ]]; then
+            echo "Failed to exchange OIDC token for JFrog access token: $RESP" >&2; exit 1
+          fi
+          echo "APPTRUST_ACCESS_TOKEN=${APPTRUST_ACCESS_TOKEN}" >> "$GITHUB_ENV"
 
       - name: Set up Python
         if: env.SKIP != 'true'
@@ -235,7 +218,7 @@ jobs:
                   raise SystemExit('Unable to resolve a valid platform version from AppTrust')
           if not version:
               raise SystemExit('Missing PLATFORM_VERSION (payload or fallback)')
-          url=f"{base}/applications/{urllib.parse.quote(app)}/versions/{urllib.parse.quote(version)}/content?include=releasables"
+          url=f"{base}/applications/{urllib.parse.quote(app)}/versions/{urllib.parse.quote(version)}/content?include=releasables,sources"
           req=urllib.request.Request(url, headers={"Authorization": f"Bearer {token}", "Accept": "application/json"})
           try:
               with urllib.request.urlopen(req, timeout=60) as resp:
@@ -260,35 +243,80 @@ jobs:
         if: env.SKIP != 'true'
         run: |
           python - << 'PY'
-          import json, yaml
+          import json, yaml, os
           comp=json.load(open('platform_components.json'))
-          # For demo simplicity, assume we know mapping service->values keys
-          mapping={
+
+          # Known app->values key mapping
+          app_to_values_key={
             'bookverse-inventory':'inventory',
             'bookverse-recommendations':'recommendations',
             'bookverse-checkout':'checkout',
             'bookverse-web':'web',
           }
-          # Extract versions from sources.versions if present
-          versions={}
-          src=comp.get('sources',{}).get('versions',[])
+
+          def coalesce_keys(obj, *keys):
+              for k in keys:
+                  if isinstance(obj, dict) and k in obj and obj[k] not in (None, ''):
+                      return obj[k]
+              return None
+
+          # 1) Extract component versions from sources.versions (preferred)
+          versions_by_app={}
+          src=(((comp or {}).get('sources') or {}).get('versions'))
           if isinstance(src, list):
-              for v in src:
-                  ak=v.get('application_key') or v.get('application') or ''
-                  ver=v.get('version')
+              for entry in src:
+                  ak = coalesce_keys(entry, 'application_key','applicationKey','application') or ''
+                  ver = coalesce_keys(entry, 'application_version','applicationVersion','version')
                   if ak and ver:
-                      versions[ak]=ver
+                      versions_by_app[str(ak)]=str(ver)
+
+          # 2) Also try to derive versions from releasables when available
+          #    Many systems annotate each releasable with application_key and version
+          rel = (comp or {}).get('releasables')
+          if isinstance(rel, list):
+              for item in rel:
+                  props = coalesce_keys(item, 'properties','props','metadata','attributes') or {}
+                  if not isinstance(props, dict):
+                      props = {}
+                  ak = (
+                      coalesce_keys(item, 'application_key','applicationKey')
+                      or coalesce_keys(props, 'application_key','applicationKey')
+                      or ''
+                  )
+                  ver = (
+                      coalesce_keys(item, 'application_version','applicationVersion','version')
+                      or coalesce_keys(props, 'application_version','applicationVersion','version','docker.tag','image_tag')
+                  )
+                  if ak and ver and ak not in versions_by_app:
+                      versions_by_app[str(ak)] = str(ver)
+
+          # Helper to write tags into values
           def update_file(path):
             y=yaml.safe_load(open(path))
-            plat_ver = comp.get('version') or comp.get('platform_version')
+            # Set platform version if present in content
+            plat_ver = coalesce_keys(comp, 'version','platform_version')
             if plat_ver is not None:
                 y.setdefault('platform', {})['version']=str(plat_ver)
-            for ak,svc in mapping.items():
-                ver=versions.get(ak)
+
+            # Map app->values keys (top-level services)
+            decisions = []
+            for app_key, values_key in app_to_values_key.items():
+                ver = versions_by_app.get(app_key)
                 if ver:
-                    y.setdefault(svc, {})['tag']=str(ver)
+                    y.setdefault(values_key, {})['tag']=str(ver)
+                    decisions.append(f"{values_key} <- {app_key}:{ver}")
+
+            # Special case: recommendations.worker uses same app version unless a specific worker version exists
+            rec_ver = versions_by_app.get('bookverse-recommendations')
+            if rec_ver:
+                y.setdefault('recommendations', {}).setdefault('worker', {})['tag']=str(rec_ver)
+                decisions.append(f"recommendations.worker <- bookverse-recommendations:{rec_ver}")
+
             with open(path,'w') as f:
                 yaml.safe_dump(y, f, sort_keys=False)
+
+            # No summary output here; keep summary concise in summarize_pins
+
           # Update single values file only
           update_file('charts/platform/values.yaml')
           PY
@@ -325,18 +353,74 @@ jobs:
     needs: pin_and_package
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+      - name: Ensure latest main
+        run: |
+          git fetch origin main --depth=1
+          git checkout -qf origin/main
       - name: Summarize pinned image tags
         env:
           SKIP: ${{ needs.pin_and_package.outputs.SKIP || '' }}
         run: |
           python - << 'PY'
-          import os, yaml
+          import os, json, yaml
+
           def read_yaml(path):
               try:
                   with open(path, 'r', encoding='utf-8') as f:
                       return yaml.safe_load(f) or {}
               except Exception:
                   return {}
+
+          def coalesce(obj, *keys):
+              for k in keys:
+                  if isinstance(obj, dict) and k in obj and obj[k] not in (None, ''):
+                      return obj[k]
+              return None
+
+          # 1) Payload (concise)
+          payload = {}
+          ev_path=os.environ.get('GITHUB_EVENT_PATH')
+          if ev_path and os.path.exists(ev_path):
+              try:
+                  ev=json.load(open(ev_path))
+              except Exception:
+                  ev={}
+              cp=ev.get('client_payload') if isinstance(ev.get('client_payload'), dict) else {}
+              data=cp.get('data') if isinstance(cp.get('data'), dict) else {}
+              payload={
+                  'application_key': data.get('application_key') or data.get('applicationKey') or cp.get('application_key') or cp.get('applicationKey') or '',
+                  'application_version': data.get('application_version') or data.get('applicationVersion') or cp.get('application_version') or cp.get('applicationVersion') or '',
+                  'stage': data.get('stage') or cp.get('stage') or ev.get('stage') or ''
+              }
+
+          # 2) Extracted component versions from platform_components.json
+          versions_by_app = {}
+          try:
+              comp = json.load(open('platform_components.json'))
+          except Exception:
+              comp = {}
+          src = (((comp or {}).get('sources') or {}).get('versions'))
+          if isinstance(src, list):
+              for entry in src:
+                  ak = coalesce(entry, 'application_key','applicationKey','application')
+                  ver = coalesce(entry, 'application_version','applicationVersion','version')
+                  if ak and ver:
+                      versions_by_app[str(ak)] = str(ver)
+          rel = (comp or {}).get('releasables')
+          if isinstance(rel, list):
+              for item in rel:
+                  props = coalesce(item, 'properties','props','metadata','attributes') or {}
+                  if not isinstance(props, dict):
+                      props = {}
+                  ak = coalesce(item, 'application_key','applicationKey') or coalesce(props, 'application_key','applicationKey')
+                  ver = coalesce(item, 'application_version','applicationVersion','version') or coalesce(props, 'application_version','applicationVersion','version','docker.tag','image_tag')
+                  if ak and ver and ak not in versions_by_app:
+                      versions_by_app[str(ak)] = str(ver)
+
+          # 3) Pinned tags from values.yaml
           y = read_yaml('charts/platform/values.yaml')
           def get_tag(doc, svc):
               if svc == 'recommendations.worker':
@@ -344,21 +428,30 @@ jobs:
               if svc == 'recommendations':
                   return ((doc.get('recommendations') or {}).get('tag')) or ''
               return ((doc.get(svc) or {}).get('tag')) or ''
-          lines = []
+
+          sections = []
+          sections.append("### Payload")
+          sections.append("""```json\n%s\n```""" % json.dumps(payload, indent=2, ensure_ascii=False))
+
+          sections.append("### Extracted components")
+          if versions_by_app:
+              for k in sorted(versions_by_app.keys()):
+                  sections.append(f"- {k}: {versions_by_app[k]}")
+          else:
+              sections.append("- (none found)")
+
+          sections.append("### Pinned image tags")
+          sections.append(f"platform.version = {(y.get('platform') or {}).get('version','')}")
           for svc in ['web','inventory','recommendations','checkout','recommendations.worker']:
-              lines.append(f"- {svc}: tag={get_tag(y, svc)}")
-          body = [
-              "### Pinned image tags",
-              f"platform.version = {(y.get('platform') or {}).get('version','')}",
-              "",
-              *lines,
-          ]
+              sections.append(f"- {svc}: tag={get_tag(y, svc)}")
+
           summary = os.environ.get('GITHUB_STEP_SUMMARY','')
+          text = "\n".join(sections) + "\n"
           if summary:
               with open(summary, 'a', encoding='utf-8') as f:
-                  f.write("\n".join(body) + "\n")
+                  f.write(text)
           else:
-              print("\n".join(body))
+              print(text)
           PY
 
 
