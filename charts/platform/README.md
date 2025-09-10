@@ -21,7 +21,6 @@ A simple, demo-focused Helm chart that aggregates the BookVerse services (web, i
 
 ## Quickstart
 
-<<<<<<< HEAD
 Render:
 
 ```bash
@@ -29,36 +28,18 @@ helm template bookverse charts/platform -f charts/platform/values.yaml
 ```
 
 Install:
-=======
-Render (prod-only):
-
-```bash
-helm template bookverse charts/platform -f charts/platform/values.yaml -f charts/platform/values-prod.yaml
-```
-
-Install (prod-only example):
->>>>>>> temp-squash-1757426822
 
 ```bash
 helm upgrade --install bookverse charts/platform \
   -n bookverse --create-namespace \
-<<<<<<< HEAD
   -f charts/platform/values.yaml
-=======
-  -f charts/platform/values.yaml -f charts/platform/values-prod.yaml
->>>>>>> temp-squash-1757426822
 ```
 
 Set a new platform version:
 
 ```bash
-<<<<<<< HEAD
 # Update platform.version in the single values.yaml
 sed -i '' 's/platform:\n  version: ".*"/platform:\n  version: "prod-2025-09-06"/' charts/platform/values.yaml
-=======
-# Update prod values
-sed -i '' 's/platform:\n  version: ".*"/platform:\n  version: "2025-09-06"/' charts/platform/values-prod.yaml
->>>>>>> temp-squash-1757426822
 ```
 
 ## Ingress
@@ -70,12 +51,7 @@ sed -i '' 's/platform:\n  version: ".*"/platform:\n  version: "2025-09-06"/' cha
 
 ## Environments
 
-<<<<<<< HEAD
 - Single `values.yaml` is used (no env overlays). Argo CD Applications reference this chart directly without additional value files.
-=======
-- This demo uses a PROD-only overlay: `values-prod.yaml`.
-- Argo CD Applications reference this chart with `values-prod.yaml` only.
->>>>>>> temp-squash-1757426822
 
 ## Notes
 
