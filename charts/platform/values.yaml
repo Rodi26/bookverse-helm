@@ -1,7 +1,7 @@
 global:
   imageRegistry: ''
 platform:
-  version: 2.1.25
+  version: 2.1.26
 platformWebhook: {}
 web:
   repository: ''
