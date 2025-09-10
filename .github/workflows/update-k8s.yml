@@ -84,7 +84,6 @@ jobs:
         env:
           JFROG_URL: ${{ vars.JFROG_URL }}
           JFROG_ACCESS_TOKEN: ${{ secrets.JFROG_ACCESS_TOKEN }}
-          PROJECT_KEY: ${{ vars.PROJECT_KEY }}
         run: |
           set -euo pipefail
           BASE="${JFROG_URL%/}"
@@ -94,12 +93,10 @@ jobs:
             exit 1
           fi
           URL="${BASE}/apptrust/api/v1/applications?limit=1"
-          CURL_ARGS=( -sS -o /tmp/jf_token_check.json -w "%{http_code}" -H "Authorization: Bearer ${JFROG_ACCESS_TOKEN}" -H "Accept: application/json" )
-          if [[ -n "${PROJECT_KEY:-}" ]]; then
-            URL="${URL}&project=${PROJECT_KEY}"
-            CURL_ARGS+=( -H "X-JFrog-Project: ${PROJECT_KEY}" )
-          fi
-          CODE=$(curl "${CURL_ARGS[@]}" "$URL")
+          CODE=$(curl -sS -o /tmp/jf_token_check.json -w "%{http_code}" \
+            -H "Authorization: Bearer ${JFROG_ACCESS_TOKEN}" \
+            -H "Accept: application/json" \
+            "$URL")
           if [[ "$CODE" != "200" ]]; then
             echo "AppTrust token check failed: HTTP ${CODE}" >&2
             (head -c 400 /tmp/jf_token_check.json || true) >&2
@@ -126,7 +123,6 @@ jobs:
           PLATFORM_APP: bookverse-platform
           JFROG_URL: ${{ vars.JFROG_URL }}
           JFROG_ACCESS_TOKEN: ${{ secrets.JFROG_ACCESS_TOKEN }}
-          PROJECT_KEY: ${{ vars.PROJECT_KEY }}
         run: |
           python - << 'PY'
           import os, json, re, urllib.request, urllib.error, urllib.parse
@@ -188,13 +184,10 @@ jobs:
               # Fallback: try latest RELEASED; if that fails, try latest regardless of status via AppTrust API
               base=os.environ.get('JFROG_URL','').rstrip('/')
               token=os.environ.get('JFROG_ACCESS_TOKEN','')
-              project=os.environ.get('PROJECT_KEY','')
               if not base or not token:
                   raise SystemExit('Missing JFROG_URL or JFROG_ACCESS_TOKEN')
               def http_get_json(url: str):
                   headers={"Authorization": f"Bearer {token}", "Accept": "application/json"}
-                  if project:
-                      headers["X-JFrog-Project"]=project
                   req=urllib.request.Request(url, headers=headers)
                   try:
                       with urllib.request.urlopen(req, timeout=30) as resp:
@@ -212,8 +205,6 @@ jobs:
                       print(f"WARN: GET {url} -> {e.code} {body[:200]}")
                       return {}
               base_q = f"{base}/apptrust/api/v1/applications/{urllib.parse.quote(app)}/versions?limit=1"
-              if project:
-                  base_q = base_q + f"&project={urllib.parse.quote(project)}"
               payload = http_get_json(base_q + "&release_status=RELEASED") or http_get_json(base_q)
               if isinstance(payload, dict):
                   candidates = payload.get('results') or payload.get('data') or payload.get('items') or payload.get('versions') or []
@@ -249,26 +240,15 @@ jobs:
         env:
           JFROG_URL: ${{ vars.JFROG_URL }}
           JFROG_ACCESS_TOKEN: ${{ secrets.JFROG_ACCESS_TOKEN }}
-          PROJECT_KEY: ${{ vars.PROJECT_KEY }}
         run: |
           set -euo pipefail
           echo "Fetching platform content for ${APPTRUST_APPLICATION}@${RESOLVED_PV}"
-          BASE_URL="${JFROG_URL%/}/apptrust/api/v1/applications/${APPTRUST_APPLICATION}/versions/${RESOLVED_PV}/content?include=releasables,sources"
-          CURL_ARGS_BASE=( -sS -o platform_components.json -w "%{http_code}" -H "Authorization: Bearer ${JFROG_ACCESS_TOKEN}" -H "Accept: application/json" )
-          # Attempt with project scoping first (if provided)
-          if [[ -n "${PROJECT_KEY:-}" ]]; then
-            URL_PRJ="${BASE_URL}&project=${PROJECT_KEY}"
-            CODE=$(curl "${CURL_ARGS_BASE[@]}" -H "X-JFrog-Project: ${PROJECT_KEY}" "$URL_PRJ")
-            echo "Content fetch (with project=${PROJECT_KEY}) HTTP ${CODE}"
-            if [[ "$CODE" != "200" ]]; then
-              echo "Retrying content fetch without project scoping..."
-              CODE=$(curl "${CURL_ARGS_BASE[@]}" "$BASE_URL")
-              echo "Content fetch (no project) HTTP ${CODE}"
-            fi
-          else
-            CODE=$(curl "${CURL_ARGS_BASE[@]}" "$BASE_URL")
-            echo "Content fetch (no project) HTTP ${CODE}"
-          fi
+          URL="${JFROG_URL%/}/apptrust/api/v1/applications/${APPTRUST_APPLICATION}/versions/${RESOLVED_PV}/content?include=releasables,sources"
+          CODE=$(curl -sS -o platform_components.json -w "%{http_code}" \
+            -H "Authorization: Bearer ${JFROG_ACCESS_TOKEN}" \
+            -H "Accept: application/json" \
+            "$URL")
+          echo "Content fetch HTTP ${CODE}"
 
       - name: Pin image tags in values.yaml
         if: env.SKIP != 'true'
