@@ -79,6 +79,31 @@ jobs:
           jf c show
           jf rt ping
 
+      - name: Validate JFROG_ACCESS_TOKEN permissions
+        if: env.SKIP != 'true'
+        env:
+          JFROG_URL: ${{ vars.JFROG_URL }}
+          JFROG_ACCESS_TOKEN: ${{ secrets.JFROG_ACCESS_TOKEN }}
+        run: |
+          set -euo pipefail
+          BASE="${JFROG_URL%/}"
+          if [[ -z "${BASE}" ]]; then echo "Missing vars.JFROG_URL" >&2; exit 1; fi
+          if [[ -z "${JFROG_ACCESS_TOKEN:-}" ]]; then
+            echo "JFROG_ACCESS_TOKEN is not set. Configure this repo secret with AppTrust read permissions." >&2
+            exit 1
+          fi
+          URL="${BASE}/apptrust/api/v1/applications?limit=1"
+          CODE=$(curl -sS -o /tmp/jf_token_check.json -w "%{http_code}" \
+            -H "Authorization: Bearer ${JFROG_ACCESS_TOKEN}" \
+            -H "Accept: application/json" \
+            "$URL")
+          if [[ "$CODE" != "200" ]]; then
+            echo "AppTrust token check failed: HTTP ${CODE}" >&2
+            (head -c 400 /tmp/jf_token_check.json || true) >&2
+            exit 1
+          fi
+          echo "JFROG_ACCESS_TOKEN validation succeeded."
+
       - name: Set up Python
         if: env.SKIP != 'true'
         uses: actions/setup-python@v5
