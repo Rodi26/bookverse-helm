@@ -96,9 +96,11 @@ jobs:
         id: resolve
         env:
           PLATFORM_APP: bookverse-platform
+          JFROG_URL: ${{ vars.JFROG_URL }}
+          JFROG_ACCESS_TOKEN: ${{ secrets.JFROG_ACCESS_TOKEN }}
         run: |
           python - << 'PY'
-          import os, json, re, subprocess, shlex
+          import os, json, re, urllib.request, urllib.error, urllib.parse
           app=os.environ.get('PLATFORM_APP','bookverse-platform')
           version=''
           # Try resolve from repository_dispatch payload
@@ -154,20 +156,30 @@ jobs:
                   print(f"INFO: Ignoring invalid platform version from payload: {_v!r}")
                   version = ''
           if not version:
-              # Fallback: try latest RELEASED; if that fails, try latest regardless of status
-              def jf_rt_get(path: str):
+              # Fallback: try latest RELEASED; if that fails, try latest regardless of status via AppTrust API
+              base=os.environ.get('JFROG_URL','').rstrip('/')
+              token=os.environ.get('JFROG_ACCESS_TOKEN','')
+              if not base or not token:
+                  raise SystemExit('Missing JFROG_URL or JFROG_ACCESS_TOKEN')
+              def http_get_json(url: str):
+                  req=urllib.request.Request(url, headers={"Authorization": f"Bearer {token}", "Accept": "application/json"})
                   try:
-                      out = subprocess.check_output(shlex.split(f"jf rt curl -H Accept:application/json '{path}'"), stderr=subprocess.STDOUT)
-                      txt = out.decode('utf-8','ignore')
+                      with urllib.request.urlopen(req, timeout=30) as resp:
+                          raw = resp.read().decode('utf-8') or '{}'
                       try:
-                          return json.loads(txt)
+                          return json.loads(raw)
                       except Exception:
                           return {}
-                  except subprocess.CalledProcessError as e:
-                      print(f"WARN: jf rt curl failed: {e.output.decode('utf-8','ignore')[:300]}")
+                  except urllib.error.HTTPError as e:
+                      body = ''
+                      try:
+                          body = e.read().decode('utf-8', 'ignore')
+                      except Exception:
+                          pass
+                      print(f"WARN: GET {url} -> {e.code} {body[:200]}")
                       return {}
-              payload = jf_rt_get(f"/apptrust/api/v1/applications/{app}/versions?limit=1&release_status=RELEASED") or \
-                        jf_rt_get(f"/apptrust/api/v1/applications/{app}/versions?limit=1")
+              payload = http_get_json(f"{base}/apptrust/api/v1/applications/{urllib.parse.quote(app)}/versions?limit=1&release_status=RELEASED") or \
+                        http_get_json(f"{base}/apptrust/api/v1/applications/{urllib.parse.quote(app)}/versions?limit=1")
               if isinstance(payload, dict):
                   candidates = payload.get('results') or payload.get('data') or payload.get('items') or payload.get('versions') or []
               else:
@@ -197,14 +209,17 @@ jobs:
           print(f"Resolved platform version: {version}")
           PY
 
-      - name: Fetch platform content from AppTrust (OIDC via JFrog CLI)
+      - name: Fetch platform content from AppTrust
         if: env.SKIP != 'true'
+        env:
+          JFROG_URL: ${{ vars.JFROG_URL }}
+          JFROG_ACCESS_TOKEN: ${{ secrets.JFROG_ACCESS_TOKEN }}
         run: |
           set -euo pipefail
           echo "Fetching platform content for ${APPTRUST_APPLICATION}@${RESOLVED_PV}"
-          jf rt curl -H "Accept: application/json" \
-            "/apptrust/api/v1/applications/${APPTRUST_APPLICATION}/versions/${RESOLVED_PV}/content?include=releasables,sources" \
-            > platform_components.json
+          curl -sSf -H "Authorization: Bearer ${JFROG_ACCESS_TOKEN}" -H "Accept: application/json" \
+            "${JFROG_URL%/}/apptrust/api/v1/applications/${APPTRUST_APPLICATION}/versions/${RESOLVED_PV}/content?include=releasables,sources" \
+            -o platform_components.json
 
       - name: Pin image tags in values.yaml
         if: env.SKIP != 'true'
