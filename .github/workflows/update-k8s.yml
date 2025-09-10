@@ -253,14 +253,22 @@ jobs:
         run: |
           set -euo pipefail
           echo "Fetching platform content for ${APPTRUST_APPLICATION}@${RESOLVED_PV}"
-          URL="${JFROG_URL%/}/apptrust/api/v1/applications/${APPTRUST_APPLICATION}/versions/${RESOLVED_PV}/content?include=releasables,sources"
-          CURL_ARGS=( -sS -o platform_components.json -w "%{http_code}" -H "Authorization: Bearer ${JFROG_ACCESS_TOKEN}" -H "Accept: application/json" )
+          BASE_URL="${JFROG_URL%/}/apptrust/api/v1/applications/${APPTRUST_APPLICATION}/versions/${RESOLVED_PV}/content?include=releasables,sources"
+          CURL_ARGS_BASE=( -sS -o platform_components.json -w "%{http_code}" -H "Authorization: Bearer ${JFROG_ACCESS_TOKEN}" -H "Accept: application/json" )
+          # Attempt with project scoping first (if provided)
           if [[ -n "${PROJECT_KEY:-}" ]]; then
-            URL="${URL}&project=${PROJECT_KEY}"
-            CURL_ARGS+=( -H "X-JFrog-Project: ${PROJECT_KEY}" )
+            URL_PRJ="${BASE_URL}&project=${PROJECT_KEY}"
+            CODE=$(curl "${CURL_ARGS_BASE[@]}" -H "X-JFrog-Project: ${PROJECT_KEY}" "$URL_PRJ")
+            echo "Content fetch (with project=${PROJECT_KEY}) HTTP ${CODE}"
+            if [[ "$CODE" != "200" ]]; then
+              echo "Retrying content fetch without project scoping..."
+              CODE=$(curl "${CURL_ARGS_BASE[@]}" "$BASE_URL")
+              echo "Content fetch (no project) HTTP ${CODE}"
+            fi
+          else
+            CODE=$(curl "${CURL_ARGS_BASE[@]}" "$BASE_URL")
+            echo "Content fetch (no project) HTTP ${CODE}"
           fi
-          CODE=$(curl "${CURL_ARGS[@]}" "$URL")
-          echo "Content fetch HTTP ${CODE}"
 
       - name: Pin image tags in values.yaml
         if: env.SKIP != 'true'
