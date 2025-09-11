@@ -29,7 +29,7 @@ inventory:
   replicas: 1
   port: 8000
 recommendations:
-  repository: apptrustswampupc.jfrog.io/bookverse-recommendations-internal-docker-release-local/recommendations-api
+  repository: apptrustswampupc.jfrog.io/bookverse-recommendations-internal-docker-release-local/recommendations
   tag: 4.40.53
   replicas: 1
   port: 8000
