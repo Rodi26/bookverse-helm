@@ -284,7 +284,8 @@ jobs:
 
           # 1) Extract component versions from sources.versions (preferred for app keys)
           versions_by_app={}
-          src=((comp.get('sources') or {}).get('versions')) if isinstance(comp, dict) else None
+          _sources = comp.get('sources') if isinstance(comp, dict) else None
+          src = _sources.get('versions') if isinstance(_sources, dict) else None
           if isinstance(src, list):
               for entry in src:
                   ak = coalesce_keys(entry, 'application_key','applicationKey','application') or ''
@@ -447,7 +448,8 @@ jobs:
               releasables = raw
           elif isinstance(comp.get('releasables'), list):
               releasables = comp.get('releasables')
-          src = ((comp.get('sources') or {}).get('versions')) if isinstance(comp, dict) else None
+          _sources = comp.get('sources') if isinstance(comp, dict) else None
+          src = _sources.get('versions') if isinstance(_sources, dict) else None
           if isinstance(src, list):
               for entry in src:
                   ak = coalesce(entry, 'application_key','applicationKey','application')
