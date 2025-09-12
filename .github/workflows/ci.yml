@@ -1,14 +1,11 @@
 name: Helm CI
 
-env:
-
 on:
   push:
     branches: [ main ]
   pull_request:
     branches: [ main ]
   workflow_dispatch:
-    inputs:
 
 jobs:
   package-platform-chart:
