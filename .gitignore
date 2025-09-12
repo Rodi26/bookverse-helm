@@ -1,0 +1,13 @@
+# Local secrets (never commit)
+.secrets/
+.secrets/**
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# IDE files
+.vscode/
+.idea/
+*.swp
+*.swo
