@@ -43,6 +43,7 @@ jobs:
           stage=''
           if event_name=='repository_dispatch':
             cp = (data.get('client_payload') or {}) if isinstance(data.get('client_payload'), dict) else {}
+            # Extract stage from JFrog webhook payload structure
             stage = (cp.get('data') or {}).get('stage') or cp.get('stage') or ''
             # Fallback to top-level payload fields (e.g., JFrog webhook forwarded as-is)
             if not stage:
@@ -51,6 +52,14 @@ jobs:
             # Default to PROD for JFrog release_completed if stage missing
             if not stage and str(action).lower()=='release_completed':
               stage='PROD'
+            
+            # Debug logging
+            print(f"Debug: event_name={event_name}, action={action!r}, stage={stage!r}")
+            print(f"Debug: client_payload keys: {list(cp.keys()) if isinstance(cp, dict) else 'not dict'}")
+            if isinstance(cp, dict) and 'data' in cp:
+              data_payload = cp['data']
+              print(f"Debug: client_payload.data keys: {list(data_payload.keys()) if isinstance(data_payload, dict) else 'not dict'}")
+            
             if str(stage).lower()!='prod':
               with open(os.environ['GITHUB_ENV'],'a') as f:
                 f.write('SKIP=true\n')
@@ -79,22 +88,22 @@ jobs:
           jf c show
           jf rt ping
 
-      - name: Validate JFROG_ACCESS_TOKEN permissions
+      - name: Validate JFROG_ADMIN_TOKEN permissions
         if: env.SKIP != 'true'
         env:
           JFROG_URL: ${{ vars.JFROG_URL }}
-          JFROG_ACCESS_TOKEN: ${{ secrets.JFROG_ACCESS_TOKEN }}
+          JFROG_ADMIN_TOKEN: ${{ secrets.JFROG_ADMIN_TOKEN }}
         run: |
           set -euo pipefail
           BASE="${JFROG_URL%/}"
           if [[ -z "${BASE}" ]]; then echo "Missing vars.JFROG_URL" >&2; exit 1; fi
-          if [[ -z "${JFROG_ACCESS_TOKEN:-}" ]]; then
-            echo "JFROG_ACCESS_TOKEN is not set. Configure this repo secret with AppTrust read permissions." >&2
+          if [[ -z "${JFROG_ADMIN_TOKEN:-}" ]]; then
+            echo "JFROG_ADMIN_TOKEN is not set. Configure this repo secret with AppTrust admin permissions." >&2
             exit 1
           fi
           URL="${BASE}/apptrust/api/v1/applications?limit=1"
           CODE=$(curl -sS -o /tmp/jf_token_check.json -w "%{http_code}" \
-            -H "Authorization: Bearer ${JFROG_ACCESS_TOKEN}" \
+            -H "Authorization: Bearer ${JFROG_ADMIN_TOKEN}" \
             -H "Accept: application/json" \
             "$URL")
           if [[ "$CODE" != "200" ]]; then
@@ -102,7 +111,7 @@ jobs:
             (head -c 400 /tmp/jf_token_check.json || true) >&2
             exit 1
           fi
-          echo "JFROG_ACCESS_TOKEN validation succeeded."
+          echo "JFROG_ADMIN_TOKEN validation succeeded."
 
       - name: Set up Python
         if: env.SKIP != 'true'
@@ -122,7 +131,7 @@ jobs:
         env:
           PLATFORM_APP: bookverse-platform
           JFROG_URL: ${{ vars.JFROG_URL }}
-          JFROG_ACCESS_TOKEN: ${{ secrets.JFROG_ACCESS_TOKEN }}
+          JFROG_ACCESS_TOKEN: ${{ secrets.JFROG_ADMIN_TOKEN }}
         run: |
           python - << 'PY'
           import os, json, re, urllib.request, urllib.error, urllib.parse
@@ -239,7 +248,7 @@ jobs:
         if: env.SKIP != 'true'
         env:
           JFROG_URL: ${{ vars.JFROG_URL }}
-          JFROG_ACCESS_TOKEN: ${{ secrets.JFROG_ACCESS_TOKEN }}
+          JFROG_ACCESS_TOKEN: ${{ secrets.JFROG_ADMIN_TOKEN }}
         run: |
           set -euo pipefail
           echo "Fetching platform content for ${APPTRUST_APPLICATION}@${RESOLVED_PV}"
