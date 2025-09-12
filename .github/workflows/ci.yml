@@ -17,8 +17,6 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      
-
       - name: Setup JFrog CLI
         # Temporary workaround: using forked action until upstream fix
         # uses: jfrog/setup-jfrog-cli@v4
@@ -28,7 +26,7 @@ jobs:
 
       - name: Configure JFrog CLI
         run: |
-          jf c add --interactive=false --url "${{ vars.JFROG_URL }}" --access-token ""
+          jf c add --interactive=false --url "${{ vars.JFROG_URL }}" --access-token "${{ secrets.JFROG_ACCESS_TOKEN }}"
 
       - name: Setup Helm
         uses: azure/setup-helm@v4
@@ -37,6 +35,9 @@ jobs:
         run: |
           helm lint charts/platform
 
+      - name: Create dist directory
+        run: mkdir -p dist
+
       - name: Package chart
         run: |
           helm package charts/platform --destination dist
@@ -44,5 +45,3 @@ jobs:
       - name: Upload chart (placeholder)
         run: |
           echo "(placeholder) jf rt u \"dist/platform-*.tgz\" ${{ vars.PROJECT_KEY }}-helm-helm-internal-local/"
-
-
