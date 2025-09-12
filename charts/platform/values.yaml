@@ -5,13 +5,11 @@ platform:
 platformWebhook: {}
 web:
   repository: apptrustswampupc.jfrog.io/bookverse-web-internal-docker-release-local/web
-  tag: 1.6.14  # Updated to include entrypoint.sh fix for env var substitution
+  tag: 1.6.14
   replicas: 1
   port: 8080
   env:
     BOOKVERSE_ENV: DEV
-    # Backend service URLs - use internal k8s service names for production
-    # For local development with port-forwarding, use localhost URLs
     INVENTORY_BASE_URL: http://inventory
     RECOMMENDATIONS_BASE_URL: http://recommendations
     CHECKOUT_BASE_URL: http://checkout
