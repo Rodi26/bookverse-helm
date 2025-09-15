@@ -35,7 +35,7 @@ jobs:
           JFROG_CLI_BUILD_NUMBER: ${{ github.run_number }}-${{ github.run_attempt }}
         with:
           version: latest
-          oidc-provider-name: bookverse-inventory-github
+          oidc-provider-name: bookverse-helm-github
           oidc-audience: ${{ vars.JFROG_URL }}
           disable-job-summary: true
           disable-auto-build-publish: true
