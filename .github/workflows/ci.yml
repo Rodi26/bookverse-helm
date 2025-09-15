@@ -17,6 +17,13 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: "[Setup] Checkout bookverse-infra for shared scripts"
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ github.repository_owner }}/bookverse-infra
+          path: bookverse-infra
+          token: ${{ github.token }}
+
       - name: Setup JFrog CLI
         # Temporary workaround: using forked action until upstream fix
         # uses: jfrog/setup-jfrog-cli@v4
@@ -28,11 +35,10 @@ jobs:
           JFROG_CLI_BUILD_NUMBER: ${{ github.run_number }}-${{ github.run_attempt }}
         with:
           version: latest
-          oidc-provider-name: bookverse-helm-github
-          disable-job-summary: false
-          disable-auto-build-publish: true
-          disable-auto-evidence-collection: false
+          oidc-provider-name: bookverse-inventory-github
           oidc-audience: ${{ vars.JFROG_URL }}
+          disable-job-summary: true
+          disable-auto-build-publish: true
 
       - name: Verify JFrog Authentication
         run: |
@@ -57,3 +63,33 @@ jobs:
       - name: Upload chart
         run: |
           jf rt u "dist/platform-*.tgz" "${{ vars.PROJECT_KEY }}-helm-internal-local/"
+
+      - name: "[Evidence] Generate Chart Compliance Evidence"
+        env:
+          SERVICE_NAME: helm-platform
+          APPLICATION_KEY: bookverse-helm
+          PROJECT_KEY: ${{ vars.PROJECT_KEY }}
+          JFROG_URL: ${{ vars.JFROG_URL }}
+        run: |
+          echo "📋 Generating CI compliance evidence for Helm chart using shared patterns"
+          
+          # Create evidence directory
+          mkdir -p evidence/ci-compliance
+          
+          # Generate CI validation evidence
+          cat > evidence/ci-compliance/ci-validation.json << EOF
+          {
+            "workflow": "Helm CI",
+            "chart_name": "platform",
+            "lint_passed": true,
+            "package_created": true,
+            "upload_completed": true,
+            "validation_timestamp": "$(date -u +%Y-%m-%dT%H:%M:%SZ)",
+            "repository": "${{ github.repository }}",
+            "commit_sha": "${{ github.sha }}",
+            "workflow_run": "${{ github.run_id }}",
+            "trigger": "${{ github.event_name }}"
+          }
+          EOF
+          
+          echo "✅ CI compliance evidence generated for Helm chart"

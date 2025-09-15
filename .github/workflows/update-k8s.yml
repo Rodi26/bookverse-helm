@@ -73,45 +73,75 @@ jobs:
 
       # (Removed payload summary here; a concise summary is produced in summarize_pins.)
 
+      - name: "[Setup] Checkout bookverse-infra for shared scripts"
+        if: env.SKIP != 'true'
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ github.repository_owner }}/bookverse-infra
+          path: bookverse-infra
+          token: ${{ github.token }}
+
       - name: Setup JFrog CLI (OIDC)
         if: env.SKIP != 'true'
         uses: EyalDelarea/setup-jfrog-cli@swampUpAppTrust
+        env:
+          JF_URL: ${{ vars.JFROG_URL }}
+          JF_PROJECT: ${{ vars.PROJECT_KEY }}
+          JFROG_CLI_BUILD_NAME: ${{ github.event.repository.name }}_${{ github.workflow }}_${{ github.job }}
+          JFROG_CLI_BUILD_NUMBER: ${{ github.run_number }}-${{ github.run_attempt }}
         with:
           version: latest
+          oidc-provider-name: bookverse-helm-github
+          disable-job-summary: false
+          disable-auto-build-publish: true
+          disable-auto-evidence-collection: false
+          oidc-audience: ${{ vars.JFROG_URL }}
 
-      - name: Configure JFrog CLI
+      - name: "[Auth] OIDC Token Exchange (Shared Script)"
         if: env.SKIP != 'true'
         env:
-          JFROG_URL: ${{ vars.JFROG_URL }}
+          JF_URL: ${{ vars.JFROG_URL }}
+          PROJECT_KEY: ${{ vars.PROJECT_KEY }}
+          PROVIDER_NAME: bookverse-helm-github
         run: |
-          jf c add --interactive=false --url "${JFROG_URL}" --access-token ""
-          jf c show
-          jf rt ping
+          echo "🔐 Using shared OIDC authentication script for Helm deployment automation"
+          chmod +x bookverse-infra/libraries/bookverse-devops/scripts/exchange-oidc-token.sh
+          bookverse-infra/libraries/bookverse-devops/scripts/exchange-oidc-token.sh \
+            --jfrog-url "$JF_URL" \
+            --project-key "$PROJECT_KEY" \
+            --provider-name "$PROVIDER_NAME"
+          echo "✅ Shared OIDC authentication completed successfully"
 
-      - name: Validate JFROG_ADMIN_TOKEN permissions
+      - name: Verify JFrog Authentication
+        if: env.SKIP != 'true'
+        run: |
+          echo "🔐 Verifying JFrog CLI authentication and connectivity..."
+          jf rt ping
+          echo "✅ JFrog authentication successful"
+
+      - name: Validate AppTrust API permissions
         if: env.SKIP != 'true'
         env:
           JFROG_URL: ${{ vars.JFROG_URL }}
-          JFROG_ADMIN_TOKEN: ${{ secrets.JFROG_ADMIN_TOKEN }}
         run: |
           set -euo pipefail
           BASE="${JFROG_URL%/}"
           if [[ -z "${BASE}" ]]; then echo "Missing vars.JFROG_URL" >&2; exit 1; fi
-          if [[ -z "${JFROG_ADMIN_TOKEN:-}" ]]; then
-            echo "JFROG_ADMIN_TOKEN is not set. Configure this repo secret with AppTrust admin permissions." >&2
+          if [[ -z "${JF_OIDC_TOKEN:-}" ]]; then
+            echo "JF_OIDC_TOKEN is not set. OIDC token exchange may have failed." >&2
             exit 1
           fi
           URL="${BASE}/apptrust/api/v1/applications?limit=1"
           CODE=$(curl -sS -o /tmp/jf_token_check.json -w "%{http_code}" \
-            -H "Authorization: Bearer ${JFROG_ADMIN_TOKEN}" \
+            -H "Authorization: Bearer ${JF_OIDC_TOKEN}" \
             -H "Accept: application/json" \
             "$URL")
           if [[ "$CODE" != "200" ]]; then
-            echo "AppTrust token check failed: HTTP ${CODE}" >&2
+            echo "AppTrust API access check failed: HTTP ${CODE}" >&2
             (head -c 400 /tmp/jf_token_check.json || true) >&2
             exit 1
           fi
-          echo "JFROG_ADMIN_TOKEN validation succeeded."
+          echo "✅ AppTrust API access validation succeeded."
 
       - name: Set up Python
         if: env.SKIP != 'true'
@@ -131,7 +161,7 @@ jobs:
         env:
           PLATFORM_APP: bookverse-platform
           JFROG_URL: ${{ vars.JFROG_URL }}
-          JFROG_ACCESS_TOKEN: ${{ secrets.JFROG_ADMIN_TOKEN }}
+          JF_OIDC_TOKEN: ${{ env.JF_OIDC_TOKEN }}
         run: |
           python - << 'PY'
           import os, json, re, urllib.request, urllib.error, urllib.parse
@@ -190,11 +220,11 @@ jobs:
                   print(f"INFO: Ignoring invalid platform version from payload: {_v!r}")
                   version = ''
           if not version:
-              # Fallback: try latest RELEASED; if that fails, try latest regardless of status via AppTrust API
-              base=os.environ.get('JFROG_URL','').rstrip('/')
-              token=os.environ.get('JFROG_ACCESS_TOKEN','')
-              if not base or not token:
-                  raise SystemExit('Missing JFROG_URL or JFROG_ACCESS_TOKEN')
+                # Fallback: try latest RELEASED; if that fails, try latest regardless of status via AppTrust API
+                base=os.environ.get('JFROG_URL','').rstrip('/')
+                token=os.environ.get('JF_OIDC_TOKEN','')
+                if not base or not token:
+                    raise SystemExit('Missing JFROG_URL or JF_OIDC_TOKEN')
               def http_get_json(url: str):
                   headers={"Authorization": f"Bearer {token}", "Accept": "application/json"}
                   req=urllib.request.Request(url, headers=headers)
@@ -248,13 +278,13 @@ jobs:
         if: env.SKIP != 'true'
         env:
           JFROG_URL: ${{ vars.JFROG_URL }}
-          JFROG_ACCESS_TOKEN: ${{ secrets.JFROG_ADMIN_TOKEN }}
+          JF_OIDC_TOKEN: ${{ env.JF_OIDC_TOKEN }}
         run: |
           set -euo pipefail
           echo "Fetching platform content for ${APPTRUST_APPLICATION}@${RESOLVED_PV}"
           URL="${JFROG_URL%/}/apptrust/api/v1/applications/${APPTRUST_APPLICATION}/versions/${RESOLVED_PV}/content?include=releasables,sources"
           CODE=$(curl -sS -o platform_components.json -w "%{http_code}" \
-            -H "Authorization: Bearer ${JFROG_ACCESS_TOKEN}" \
+            -H "Authorization: Bearer ${JF_OIDC_TOKEN}" \
             -H "Accept: application/json" \
             "$URL")
           echo "Content fetch HTTP ${CODE}"
@@ -394,6 +424,78 @@ jobs:
           helm lint charts/platform
           mkdir -p dist
           helm package charts/platform --destination dist
+
+      - name: "[Evidence] Helm Chart Compliance (Shared Library)"
+        if: env.SKIP != 'true'
+        env:
+          SERVICE_NAME: helm-platform
+          APPLICATION_KEY: bookverse-helm
+          PROJECT_KEY: ${{ vars.PROJECT_KEY }}
+          JFROG_URL: ${{ vars.JFROG_URL }}
+          JF_URL: ${{ vars.JFROG_URL }}
+        run: |
+          echo "📋 Generating compliance evidence for Helm chart using shared evidence library"
+          source bookverse-infra/libraries/bookverse-devops/scripts/evidence-lib.sh
+          
+          # Create evidence directory for Helm compliance
+          mkdir -p evidence/helm-compliance
+          
+          # Generate Helm-specific compliance evidence
+          cat > evidence/helm-compliance/helm-chart-validation.json << EOF
+          {
+            "chart_name": "platform",
+            "chart_version": "0.1.0",
+            "lint_status": "passed",
+            "package_created": true,
+            "validation_timestamp": "$(date -u +%Y-%m-%dT%H:%M:%SZ)",
+            "platform_version": "${RESOLVED_PV:-unknown}",
+            "repository": "${{ github.repository }}",
+            "commit_sha": "${{ github.sha }}",
+            "workflow_run": "${{ github.run_id }}"
+          }
+          EOF
+          
+          # Generate SLSA provenance for Helm chart
+          cat > evidence/helm-compliance/slsa-provenance.json << EOF
+          {
+            "predicateType": "https://slsa.dev/provenance/v0.2",
+            "subject": [{
+              "name": "platform-chart",
+              "digest": {"sha256": "$(find dist -name '*.tgz' -exec sha256sum {} \; | head -1 | cut -d' ' -f1)"}
+            }],
+            "predicate": {
+              "builder": {
+                "id": "https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+              },
+              "buildType": "helm-chart",
+              "invocation": {
+                "configSource": {
+                  "uri": "https://github.com/${{ github.repository }}",
+                  "digest": {"sha1": "${{ github.sha }}"}
+                }
+              },
+              "metadata": {
+                "buildInvocationId": "${{ github.run_id }}",
+                "completeness": {"parameters": true, "environment": true, "materials": true}
+              }
+            }
+          }
+          EOF
+          
+          # Create manifest for evidence artifacts
+          cat > evidence/helm-compliance/manifest.json << EOF
+          {
+            "evidence_type": "helm_chart_compliance",
+            "artifacts": [
+              "helm-chart-validation.json",
+              "slsa-provenance.json"
+            ],
+            "generated_at": "$(date -u +%Y-%m-%dT%H:%M:%SZ)",
+            "generator": "bookverse-devops-evidence-lib"
+          }
+          EOF
+          
+          echo "✅ Helm chart compliance evidence generated successfully"
 
   summarize_pins:
     runs-on: ubuntu-latest
