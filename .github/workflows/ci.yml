@@ -62,7 +62,7 @@ jobs:
 
       - name: Upload chart
         run: |
-          jf rt u "dist/platform-*.tgz" "${{ vars.PROJECT_KEY }}-helm-helm-internal-local/"
+          jf rt u "dist/platform-*.tgz" "${{ vars.PROJECT_KEY }}-helm-helm-internal-local/" --flat
 
       - name: "[Evidence] Generate Chart Compliance Evidence"
         env:
