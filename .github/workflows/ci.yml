@@ -355,17 +355,11 @@ jobs:
           JFROG_CLI_BUILD_NUMBER: ${{ env.BUILD_NUMBER }}
           JFROG_CLI_BUILD_PROJECT: ${{ vars.PROJECT_KEY }}
 
-      - name: "[Auth] OIDC Token Exchange (bookverse-devops shared script)"
+      - name: "[Auth] OIDC Token Exchange (use JFrog CLI token)"
         id: exchange-oidc
         run: |
-          echo "🔐 Using bookverse-devops shared OIDC exchange script"
-          bookverse-infra/libraries/bookverse-devops/scripts/exchange-oidc-token.sh \
-            --service-name "helm" \
-            --provider-name "bookverse-helm-github" \
-            --jfrog-url "${{ vars.JFROG_URL }}" \
-            --docker-registry "${{ vars.DOCKER_REGISTRY }}" \
-            --verbose
-          echo "✅ OIDC token exchange completed using shared bookverse-devops script"
+          echo "🔐 Using JFrog CLI built-in OIDC token (like recommendations service)"
+          echo "✅ OIDC token already configured by JFrog CLI setup action"
 
       - name: "[Setup] Install Python dependencies"
         run: |
