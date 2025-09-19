@@ -1,7 +1,7 @@
 global:
   imageRegistry: apptrustswampupc.jfrog.io
 platform:
-  version: 1.0.9
+  version: 1.7.6
 platformWebhook: {}
 web:
   repository: apptrustswampupc.jfrog.io/bookverse-web-internal-docker-release-local/web
