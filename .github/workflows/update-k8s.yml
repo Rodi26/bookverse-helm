@@ -50,18 +50,38 @@ jobs:
             if not stage and str(action).lower()=='release_completed':
               stage='PROD'
             
-            print(f"Debug: event_name={event_name}, action={action!r}, stage={stage!r}")
+            # Extract application_key for gate decision
+            app_key = ''
+            if isinstance(cp, dict) and 'data' in cp:
+              data_payload = cp['data']
+              if isinstance(data_payload, dict):
+                app_key = data_payload.get('application_key') or data_payload.get('applicationKey') or ''
+            
+            print(f"Debug: event_name={event_name}, action={action!r}, stage={stage!r}, app_key={app_key!r}")
             print(f"Debug: client_payload keys: {list(cp.keys()) if isinstance(cp, dict) else 'not dict'}")
+            print(f"Debug: client_payload content: {cp if isinstance(cp, dict) else 'not dict'}")
             if isinstance(cp, dict) and 'data' in cp:
               data_payload = cp['data']
               print(f"Debug: client_payload.data keys: {list(data_payload.keys()) if isinstance(data_payload, dict) else 'not dict'}")
+              print(f"Debug: client_payload.data content: {data_payload if isinstance(data_payload, dict) else 'not dict'}")
             
-            if str(stage).lower()!='prod':
+            # Gate: Only proceed for PROD stage AND bookverse-platform application
+            should_skip = False
+            skip_reason = ""
+            
+            if str(stage).lower() != 'prod':
+              should_skip = True
+              skip_reason = f"stage is {stage!r}, not PROD"
+            elif app_key and str(app_key).lower() != 'bookverse-platform':
+              should_skip = True 
+              skip_reason = f"application_key is {app_key!r}, not bookverse-platform"
+            
+            if should_skip:
               with open(os.environ['GITHUB_ENV'],'a') as f:
                 f.write('SKIP=true\n')
-              print(f"Skipping repository_dispatch: action={action!r}, stage={stage!r}")
+              print(f"Skipping repository_dispatch: {skip_reason}")
             else:
-              print("Proceeding: repository_dispatch for PROD")
+              print("Proceeding: repository_dispatch for PROD bookverse-platform")
           else:
             print(f"Proceeding: non-dispatch event={event_name}")
           PY
