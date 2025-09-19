@@ -130,6 +130,7 @@ jobs:
           URL="${BASE}/apptrust/api/v1/applications?limit=1"
           CODE=$(curl -sS -o /tmp/jf_token_check.json -w "%{http_code}" \
             -H "Authorization: Bearer ${JF_OIDC_TOKEN}" \
+            -H "X-JFrog-Project: ${{ vars.PROJECT_KEY }}" \
             -H "Accept: application/json" \
             "$URL")
           if [[ "$CODE" != "200" ]]; then
