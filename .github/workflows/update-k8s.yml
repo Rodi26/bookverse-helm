@@ -135,6 +135,7 @@ jobs:
           PLATFORM_APP: bookverse-platform
           JFROG_URL: ${{ vars.JFROG_URL }}
           JF_OIDC_TOKEN: ${{ env.JF_OIDC_TOKEN }}
+          PROJECT_KEY: ${{ vars.PROJECT_KEY }}
         run: |
           python - << 'PY'
           import os, json, re, urllib.request, urllib.error, urllib.parse
@@ -192,10 +193,11 @@ jobs:
           if not version:
               base=os.environ.get('JFROG_URL','').rstrip('/')
               token=os.environ.get('JF_OIDC_TOKEN','')
+              project_key=os.environ.get('PROJECT_KEY','bookverse')
               if not base or not token:
                   raise SystemExit('Missing JFROG_URL or JF_OIDC_TOKEN')
               def http_get_json(url: str):
-                  headers={"Authorization": f"Bearer {token}", "Accept": "application/json", "X-JFrog-Project": "bookverse"}
+                  headers={"Authorization": f"Bearer {token}", "Accept": "application/json", "X-JFrog-Project": project_key}
                   req=urllib.request.Request(url, headers=headers)
                   try:
                       with urllib.request.urlopen(req, timeout=30) as resp:
