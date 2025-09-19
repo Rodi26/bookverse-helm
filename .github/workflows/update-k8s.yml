@@ -101,9 +101,11 @@ jobs:
           echo "🔐 Using shared OIDC authentication script for Helm deployment automation"
           chmod +x bookverse-infra/libraries/bookverse-devops/scripts/exchange-oidc-token.sh
           bookverse-infra/libraries/bookverse-devops/scripts/exchange-oidc-token.sh \
+            --service-name "helm" \
+            --provider-name "$PROVIDER_NAME" \
             --jfrog-url "$JF_URL" \
-            --project-key "$PROJECT_KEY" \
-            --provider-name "$PROVIDER_NAME"
+            --docker-registry "${{ vars.DOCKER_REGISTRY }}" \
+            --verbose
           echo "✅ Shared OIDC authentication completed successfully"
 
       - name: Verify JFrog Authentication
