@@ -398,6 +398,149 @@ jobs:
           curl -sS -H "Authorization: Bearer $JF_OIDC_TOKEN" -H "Accept: application/json" "$URL" \
             | jq '.buildInfo.modules // [] | map({id, artifacts: (.artifacts // [] | length)})'
 
+      - name: "[Debug] Test API Permissions & CLI Operations"
+        run: |
+          echo "🔍 Testing various API endpoints and CLI operations to diagnose permissions scope"
+          echo "🎯 This will help determine if it's a general permissions issue or AppTrust-specific"
+          echo ""
+          
+          if [[ -z "${JF_OIDC_TOKEN:-}" ]]; then
+            echo "❌ Missing JF_OIDC_TOKEN for API tests" >&2
+            exit 1
+          fi
+          
+          BASE_ARTIFACTORY="${{ vars.JFROG_URL }}/artifactory/api"
+          BASE_APPTRUST="${{ vars.JFROG_URL }}/apptrust/api/v1"
+          
+          echo "🧪 === API PERMISSION TESTS ==="
+          
+          # Test 1: List builds (should work - we did this before)
+          echo "📋 Test 1: List builds in build-info repository"
+          BUILD_STATUS=$(curl -sS -w "%{http_code}" -o /dev/null \
+            "$BASE_ARTIFACTORY/build" \
+            -H "Authorization: Bearer $JF_OIDC_TOKEN" \
+            -H "Accept: application/json")
+          echo "  Result: HTTP $BUILD_STATUS"
+          
+          # Test 2: Get specific build info (should work)
+          echo "📦 Test 2: Get specific build info"
+          BUILD_INFO_STATUS=$(curl -sS -w "%{http_code}" -o /dev/null \
+            "$BASE_ARTIFACTORY/build/bookverse-helm_Helm%20CI_build-test-publish/55-1" \
+            -H "Authorization: Bearer $JF_OIDC_TOKEN" \
+            -H "Accept: application/json")
+          echo "  Result: HTTP $BUILD_INFO_STATUS"
+          
+          # Test 3: List repositories
+          echo "🗂️  Test 3: List repositories"
+          REPOS_STATUS=$(curl -sS -w "%{http_code}" -o /dev/null \
+            "$BASE_ARTIFACTORY/repositories" \
+            -H "Authorization: Bearer $JF_OIDC_TOKEN" \
+            -H "Accept: application/json")
+          echo "  Result: HTTP $REPOS_STATUS"
+          
+          # Test 4: List packages in helm repository
+          echo "📦 Test 4: Search packages in helm repository"
+          PACKAGES_STATUS=$(curl -sS -w "%{http_code}" -o /dev/null \
+            "$BASE_ARTIFACTORY/search/aql" \
+            -H "Authorization: Bearer $JF_OIDC_TOKEN" \
+            -H "Content-Type: text/plain" \
+            -d 'items.find({"repo":"bookverse-helm-internal-helm-nonprod-local","type":"file"}).limit(5)')
+          echo "  Result: HTTP $PACKAGES_STATUS"
+          
+          echo ""
+          echo "🏛️  === APPTRUST API TESTS ==="
+          
+          # Test 5: List all applications (general AppTrust read)
+          echo "📋 Test 5: List all applications"
+          APPS_LIST_STATUS=$(curl -sS -w "%{http_code}" -o /dev/null \
+            "$BASE_APPTRUST/applications" \
+            -H "Authorization: Bearer $JF_OIDC_TOKEN" \
+            -H "Accept: application/json")
+          echo "  Result: HTTP $APPS_LIST_STATUS"
+          
+          # Test 6: Get specific application (bookverse-helm)
+          echo "🎯 Test 6: Get bookverse-helm application"
+          APP_GET_STATUS=$(curl -sS -w "%{http_code}" -o /dev/null \
+            "$BASE_APPTRUST/applications/bookverse-helm" \
+            -H "Authorization: Bearer $JF_OIDC_TOKEN" \
+            -H "Accept: application/json")
+          echo "  Result: HTTP $APP_GET_STATUS"
+          
+          # Test 7: List versions of bookverse-helm application
+          echo "📋 Test 7: List bookverse-helm application versions"
+          VERSIONS_STATUS=$(curl -sS -w "%{http_code}" -o /dev/null \
+            "$BASE_APPTRUST/applications/bookverse-helm/versions" \
+            -H "Authorization: Bearer $JF_OIDC_TOKEN" \
+            -H "Accept: application/json")
+          echo "  Result: HTTP $VERSIONS_STATUS"
+          
+          # Test 8: Try to get a working application from another service
+          echo "🔄 Test 8: Get bookverse-recommendations application (for comparison)"
+          RECO_APP_STATUS=$(curl -sS -w "%{http_code}" -o /dev/null \
+            "$BASE_APPTRUST/applications/bookverse-recommendations" \
+            -H "Authorization: Bearer $JF_OIDC_TOKEN" \
+            -H "Accept: application/json")
+          echo "  Result: HTTP $RECO_APP_STATUS"
+          
+          echo ""
+          echo "🔧 === CLI COMMAND TESTS ==="
+          
+          # Test 9: JFrog CLI - basic ping (should work)
+          echo "🏓 Test 9: JFrog CLI ping"
+          if jf rt ping; then
+            echo "  Result: ✅ SUCCESS"
+          else
+            echo "  Result: ❌ FAILED"
+          fi
+          
+          # Test 10: JFrog CLI - list builds
+          echo "📋 Test 10: JFrog CLI list builds"
+          if jf rt curl -X GET "/api/build" > /dev/null 2>&1; then
+            echo "  Result: ✅ SUCCESS"
+          else
+            echo "  Result: ❌ FAILED"
+          fi
+          
+          # Test 11: Try to modify tags on existing application version (if any exist)
+          echo "🏷️  Test 11: Try to modify tags on existing application version"
+          # First, let's see if we can find an existing version
+          EXISTING_VERSION_RESPONSE=$(mktemp)
+          EXISTING_VERSION_STATUS=$(curl -sS -L -o "$EXISTING_VERSION_RESPONSE" -w "%{http_code}" \
+            "$BASE_APPTRUST/applications/bookverse-helm/versions?limit=1" \
+            -H "Authorization: Bearer $JF_OIDC_TOKEN" \
+            -H "Accept: application/json")
+          
+          if [[ "$EXISTING_VERSION_STATUS" == "200" ]]; then
+            # Extract the first version if it exists
+            EXISTING_VERSION=$(jq -r '.versions[0].version // empty' "$EXISTING_VERSION_RESPONSE" 2>/dev/null || echo "")
+            if [[ -n "$EXISTING_VERSION" ]]; then
+              echo "  Found existing version: $EXISTING_VERSION"
+              
+              # Try to update tags on this version
+              TAG_UPDATE_PAYLOAD='{"tag":"debug-test"}'
+              TAG_UPDATE_STATUS=$(curl -sS -w "%{http_code}" -o /dev/null -X PATCH \
+                "$BASE_APPTRUST/applications/bookverse-helm/versions/$EXISTING_VERSION" \
+                -H "Authorization: Bearer $JF_OIDC_TOKEN" \
+                -H "Content-Type: application/json" \
+                -d "$TAG_UPDATE_PAYLOAD")
+              echo "  Tag update result: HTTP $TAG_UPDATE_STATUS"
+            else
+              echo "  No existing versions found to test tag update"
+            fi
+          else
+            echo "  Could not list versions: HTTP $EXISTING_VERSION_STATUS"
+          fi
+          rm -f "$EXISTING_VERSION_RESPONSE"
+          
+          echo ""
+          echo "📊 === SUMMARY ==="
+          echo "This debug information will help identify:"
+          echo "  - Whether OIDC token works for general Artifactory operations"
+          echo "  - Whether OIDC token works for AppTrust read operations"  
+          echo "  - Whether OIDC token works for AppTrust write operations"
+          echo "  - Whether the issue is specific to bookverse-helm or general"
+          echo ""
+
       - name: "[Create] Application Version"
         run: |
           echo "🚀 Creating AppTrust application version: ${{ env.APP_VERSION }}"
