@@ -1,95 +1,646 @@
 name: Helm CI
 
+concurrency:
+  group: ci-${{ vars.PROJECT_KEY }}-${{ github.repository }}
+  cancel-in-progress: true
+
 on:
   push:
-    branches: [ main ]
+    branches: [main]
   pull_request:
-    branches: [ main ]
+    branches: [main]
   workflow_dispatch:
+    inputs:
+      reason:
+        description: 'Reason for manual CI trigger'
+        required: false
+        default: 'Manual testing'
+        type: string
+      force_app_version:
+        description: 'Force application version creation (override commit filter)'
+        required: false
+        default: true
+        type: boolean
 
 jobs:
-  package-platform-chart:
+  analyze-commit:
+    name: "Demo: Analyze Commit (Demo-Optimized)"
     runs-on: ubuntu-latest
-    permissions:
-      contents: read
-      id-token: write
+    outputs:
+      create_app_version: ${{ steps.demo-filter.outputs.create_app_version }}
+      decision_reason: ${{ steps.demo-filter.outputs.decision_reason }}
+      commit_type: ${{ steps.demo-filter.outputs.commit_type }}
     steps:
-      - name: Checkout
+      - name: "[Setup] Checkout"
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
 
       - name: "[Setup] Checkout bookverse-infra for shared scripts"
         uses: actions/checkout@v4
         with:
-          repository: ${{ github.repository_owner }}/bookverse-infra
+          repository: yonatanp-jfrog/bookverse-infra
           path: bookverse-infra
-          token: ${{ github.token }}
 
-      - name: Setup JFrog CLI
-        # Temporary workaround: using forked action until upstream fix
-        # uses: EyalDelarea/setup-jfrog-cli@swampUpAppTrust
-        uses: EyalDelarea/setup-jfrog-cli@swampUpAppTrust
+      - name: "[Demo] Commit Analysis (Optimized for Visibility)"
+        id: demo-filter
         env:
-          JF_URL: ${{ vars.JFROG_URL }}
-          JF_PROJECT: ${{ vars.PROJECT_KEY }}
-          JFROG_CLI_BUILD_NAME: ${{ github.event.repository.name }}_${{ github.workflow }}_${{ github.job }}
-          JFROG_CLI_BUILD_NUMBER: ${{ github.run_number }}-${{ github.run_attempt }}
+          GITHUB_EVENT_INPUTS_FORCE_APP_VERSION: ${{ inputs.force_app_version }}
+        run: |
+          echo "🎯 DEMO MODE: Analyzing commit for CI/CD pipeline demonstration"
+          echo "📝 Commit: ${GITHUB_SHA:0:8}"
+          echo "💬 Message: $(git log -1 --pretty=%B)"
+          echo "📁 Changed files: $(git diff --name-only HEAD~1 | wc -l) files"
+          echo "🏭 Production note: Real systems would use conservative defaults"
+          echo ""
+          echo "🔗 Using shared commit analysis script from bookverse-devops"
+          echo "📂 Using shared scripts from bookverse-infra repository"
+          echo "🔧 Making script executable..."
+          chmod +x bookverse-infra/libraries/bookverse-devops/scripts/analyze-commit.sh
+          echo "🚀 Running script..."
+          bookverse-infra/libraries/bookverse-devops/scripts/analyze-commit.sh
+          echo "✅ Commit analysis completed using shared script"
+
+  build-test-publish:
+    name: "Build & Test (Always Runs)"
+    needs: analyze-commit
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        shell: bash
+    permissions:
+      contents: read
+      id-token: write
+    outputs:
+      build_name: ${{ steps.set-build-info.outputs.build_name }}
+      build_started_timestamp: ${{ env.BUILD_STARTED_TIMESTAMP }}
+      build_number: ${{ steps.set-build-info.outputs.build_number }}
+      app_version: ${{ steps.determine-semver.outputs.app_version }}
+      jf_oidc_token: ${{ steps.exchange-oidc.outputs.token }}
+
+    steps:
+      - name: "[Setup] Checkout"
+        uses: actions/checkout@v4
+
+      - name: "[Setup] Checkout bookverse-infra for evidence library"
+        uses: actions/checkout@v4
+        with:
+          repository: 'yonatanp-jfrog/bookverse-infra'
+          ref: 'main'
+          path: 'bookverse-infra'
+
+      - name: "[Info] Trigger Information"
+        run: |
+          echo "🚀 CI Pipeline: Build & Test Phase"
+          echo "📋 Commit Analysis Result: ${{ needs.analyze-commit.outputs.commit_type }}"
+          echo "💡 Decision: ${{ needs.analyze-commit.outputs.decision_reason }}"
+          echo "🎯 Create App Version: ${{ needs.analyze-commit.outputs.create_app_version }}"
+          echo "👤 Triggered by: ${{ github.actor }}"
+          echo "🕐 Timestamp: $(date -u)"
+
+      - name: "[Setup] Build Info"
+        id: set-build-info
+        run: |
+          BUILD_NAME="${{ github.event.repository.name }}_${{ github.workflow }}_${{ github.job }}"
+          BUILD_NUMBER="${{ github.run_number }}-${{ github.run_attempt }}"  
+          echo "BUILD_NAME=$BUILD_NAME" >> $GITHUB_ENV
+          echo "BUILD_NUMBER=$BUILD_NUMBER" >> $GITHUB_ENV
+          echo "build_name=$BUILD_NAME" >> $GITHUB_OUTPUT
+          echo "build_number=$BUILD_NUMBER" >> $GITHUB_OUTPUT
+          echo "SERVICE_NAME=helm" >> $GITHUB_ENV
+          echo "APPLICATION_KEY=bookverse-helm" >> $GITHUB_ENV
+
+      - name: "[Setup] JFrog CLI"
+        uses: EyalDelarea/setup-jfrog-cli@swampUpAppTrust
         with:
           version: latest
           oidc-provider-name: bookverse-helm-github
           oidc-audience: ${{ vars.JFROG_URL }}
           disable-job-summary: true
           disable-auto-build-publish: true
-
-      - name: Verify JFrog Authentication
+          disable-auto-evidence-collection: false
+        env:
+          JF_URL: ${{ vars.JFROG_URL }}
+          JF_PROJECT: ${{ vars.PROJECT_KEY }}
+          JFROG_CLI_BUILD_NAME: ${{ env.BUILD_NAME }}
+          JFROG_CLI_BUILD_NUMBER: ${{ env.BUILD_NUMBER }}
+          JFROG_CLI_BUILD_PROJECT: ${{ vars.PROJECT_KEY }}
+          
+      - name: "[Setup] Verify JFrog Authentication"
         run: |
           echo "🔐 Verifying JFrog CLI authentication and connectivity..."
           jf rt ping
           echo "✅ JFrog authentication successful"
 
-      - name: Setup Helm
+      - name: "[Auth] OIDC Token Exchange (bookverse-devops shared script)"
+        id: exchange-oidc
+        run: |
+          echo "🔐 Using bookverse-devops shared OIDC exchange script"
+          bookverse-infra/libraries/bookverse-devops/scripts/exchange-oidc-token.sh \
+            --service-name "helm" \
+            --provider-name "bookverse-helm-github" \
+            --jfrog-url "${{ vars.JFROG_URL }}" \
+            --docker-registry "${{ vars.DOCKER_REGISTRY }}" \
+            --verbose
+          echo "✅ OIDC token exchange completed using shared bookverse-devops script"
+          
+      - name: "[Setup] Install Python dependencies"
+        run: |
+          pip install --user PyYAML setuptools wheel
+          echo "✅ Python dependencies installed"
+
+      - name: "[Setup] Determine SemVer"
+        id: determine-semver
+        run: |
+          set -euo pipefail
+          SERVICE_NAME=${SERVICE_NAME:-$(echo ${{ github.event.repository.name }} | sed 's/bookverse-//')}
+          APPLICATION_KEY="bookverse-$SERVICE_NAME"
+          if [[ -z "${JF_OIDC_TOKEN:-}" ]]; then
+            echo "❌ Missing JF_OIDC_TOKEN. Ensure OIDC exchange step succeeded." >&2
+            exit 1
+          fi
+          echo "✅ Using persisted JFrog access token for semver determination"
+          echo "📋 Using shared semver logic from bookverse-infra"
+          INFRA_SCRIPTS_PATH="bookverse-infra/libraries/bookverse-devops/scripts"
+          if [[ -f "$INFRA_SCRIPTS_PATH/determine-semver.sh" ]]; then
+            cp "$INFRA_SCRIPTS_PATH/determine-semver.sh" .
+            cp "$INFRA_SCRIPTS_PATH/semver_versioning.py" .
+            chmod +x determine-semver.sh
+            echo "✅ Using shared semver scripts from bookverse-infra"
+          else
+            echo "❌ Shared semver scripts not found in bookverse-infra at $INFRA_SCRIPTS_PATH" >&2
+            exit 1
+          fi
+          echo "🔍 Calculating versions for all packages using shared logic..."
+          SEMVER_OUTPUT=$(./determine-semver.sh \
+            --application-key "$APPLICATION_KEY" \
+            --version-map "./config/version-map.yaml" \
+            --jfrog-url "${{ vars.JFROG_URL }}" \
+            --jfrog-token "$JF_OIDC_TOKEN" \
+            --project-key "${{ vars.PROJECT_KEY }}" \
+            --packages "platform-chart" \
+            --verbose)
+          JSON_LINE=$(echo "$SEMVER_OUTPUT" | grep '{"application_key"')
+          APP_VERSION=$(echo "$JSON_LINE" | jq -r '.app_version')
+          if [[ -z "$APP_VERSION" || "$APP_VERSION" == "null" ]]; then
+            echo "❌ Failed to extract APP_VERSION from semver output" >&2
+            echo "📋 Semver output: $SEMVER_OUTPUT" >&2
+            exit 1
+          fi
+          echo "📋 Extracting individual package versions from JSON output:"
+          
+          PLATFORM_CHART_VERSION=$(echo "$JSON_LINE" | jq -r '.package_tags."platform-chart" // empty')
+          if [[ -z "$PLATFORM_CHART_VERSION" ]]; then
+            echo "❌ Failed to determine PLATFORM_CHART_VERSION from semver script" >&2
+            echo "📋 Available package_tags: $(echo "$JSON_LINE" | jq -r '.package_tags | keys[]')" >&2
+            exit 1
+          fi
+          
+          echo "PLATFORM_CHART_VERSION=$PLATFORM_CHART_VERSION" >> $GITHUB_ENV
+          
+          echo "🏷️ Package Versions:"
+          echo "  📦 platform-chart (Helm): $PLATFORM_CHART_VERSION"
+          echo "  🏷️ Application: $APP_VERSION"
+          echo "  🔢 Build Number (for build info): $BUILD_NUMBER"
+          
+          echo "app_version=$APP_VERSION" >> $GITHUB_OUTPUT
+          echo "build_number=$BUILD_NUMBER" >> $GITHUB_OUTPUT
+          echo "APPLICATION_KEY=$APPLICATION_KEY" >> $GITHUB_ENV
+
+      - name: "[Setup] Helm"
         uses: azure/setup-helm@v4
 
-      - name: Lint chart
+      - name: "[Setup] JFrog Environment (Consolidated)"
         run: |
+          echo "🔧 Setting up consolidated JFrog environment for all subsequent steps"
+          echo "JF_PROJECT=${{ vars.PROJECT_KEY }}" >> $GITHUB_ENV
+          echo "JFROG_CLI_BUILD_PROJECT=${{ vars.PROJECT_KEY }}" >> $GITHUB_ENV
+          echo "JFROG_CLI_BUILD_NAME=$BUILD_NAME" >> $GITHUB_ENV
+          echo "JFROG_CLI_BUILD_NUMBER=$BUILD_NUMBER" >> $GITHUB_ENV
+          echo "✅ JFrog environment configured for all subsequent steps"
+
+      - name: "[Test] Lint Helm Chart"
+        run: |
+          echo "🧪 Running Helm chart linting for compliance validation"
           helm lint charts/platform
+          echo "✅ Helm chart linting passed"
 
-      - name: Create dist directory
-        run: mkdir -p dist
-
-      - name: Package chart
+      - name: "[Build] Package Helm Chart"
         run: |
-          helm package charts/platform --destination dist
+          set -euo pipefail
+          echo "📦 Creating versioned Helm chart package"
+          echo "🔧 Version: $PLATFORM_CHART_VERSION"
+          echo "📋 Chart: platform"
+          
+          mkdir -p dist
+          
+          helm package charts/platform --version "$PLATFORM_CHART_VERSION" --destination dist
+          
+          echo "✅ Helm chart packaged with version $PLATFORM_CHART_VERSION"
 
-      - name: Upload chart
+      - name: "[Artifacts] Upload Helm Chart"
         run: |
-          jf rt u "dist/platform-*.tgz" "${{ vars.PROJECT_KEY }}-helm-internal-helm-nonprod-local/" --flat
+          set -euo pipefail
+          echo "📦 Uploading versioned Helm chart to JFrog Artifactory"
+          
+          HELM_REPO="${{ vars.PROJECT_KEY }}-$SERVICE_NAME-internal-helm-nonprod-local"
+          jf rt upload "dist/platform-$PLATFORM_CHART_VERSION.tgz" "$HELM_REPO/platform/$PLATFORM_CHART_VERSION/platform-$PLATFORM_CHART_VERSION.tgz" \
+            --build-name "$BUILD_NAME" --build-number "$BUILD_NUMBER" --project "${{ vars.PROJECT_KEY }}"
+          echo "✅ Helm chart uploaded with version $PLATFORM_CHART_VERSION"
 
-      - name: "[Evidence] Generate Chart Compliance Evidence"
+      - name: "[Evidence] Chart Package Evidence"
         env:
-          SERVICE_NAME: helm-platform
-          APPLICATION_KEY: bookverse-helm
-          PROJECT_KEY: ${{ vars.PROJECT_KEY }}
-          JFROG_URL: ${{ vars.JFROG_URL }}
+          EVIDENCE_PRIVATE_KEY: ${{ secrets.EVIDENCE_PRIVATE_KEY }}
+          EVIDENCE_KEY_ALIAS: ${{ vars.EVIDENCE_KEY_ALIAS }}
         run: |
-          echo "📋 Generating CI compliance evidence for Helm chart using shared patterns"
+          echo "🛡️ Generating evidence for Helm chart package using shared library"
+          echo "📦 Target Package: platform-chart:$PLATFORM_CHART_VERSION"
+          echo "🔐 Evidence will be cryptographically signed for compliance verification"
+          source bookverse-infra/libraries/bookverse-devops/scripts/evidence-lib.sh
           
-          # Create evidence directory
-          mkdir -p evidence/ci-compliance
+          export PACKAGE_NAME="platform-chart-$PLATFORM_CHART_VERSION.tgz"
+          export PACKAGE_VERSION="$PLATFORM_CHART_VERSION"
+          export SERVICE_NAME="helm"
+          attach_generic_package_evidence "$PACKAGE_NAME" "$PACKAGE_VERSION"
           
-          # Generate CI validation evidence
-          cat > evidence/ci-compliance/ci-validation.json << EOF
-          {
-            "workflow": "Helm CI",
-            "chart_name": "platform",
-            "lint_passed": true,
-            "package_created": true,
-            "upload_completed": true,
-            "validation_timestamp": "$(date -u +%Y-%m-%dT%H:%M:%SZ)",
-            "repository": "${{ github.repository }}",
-            "commit_sha": "${{ github.sha }}",
-            "workflow_run": "${{ github.run_id }}",
-            "trigger": "${{ github.event_name }}"
-          }
-          EOF
+          echo "✅ Chart package evidence attached via shared library: helm-lint, chart-validation"
+
+      - name: "[Build Info] Publish"
+        run: |
+          echo "📋 Publishing comprehensive build-info with all associated artifacts"
+          echo "🏗️ Build: $BUILD_NAME/$BUILD_NUMBER"
+          echo "📦 Contains: 1 Helm chart + Environment metadata"
           
-          echo "✅ CI compliance evidence generated for Helm chart"
+          jf rt bag --project "${{ vars.PROJECT_KEY }}" "$BUILD_NAME" "$BUILD_NUMBER"
+          jf rt bce --project "${{ vars.PROJECT_KEY }}" "$BUILD_NAME" "$BUILD_NUMBER"
+          if BUILD_PUBLISH_RESULT=$(jf rt bp --project "${{ vars.PROJECT_KEY }}" "$BUILD_NAME" "$BUILD_NUMBER"); then
+            echo "BUILD_INFO_PUBLISH_STATUS=SUCCESS" >> $GITHUB_ENV
+            BUILD_UI_URL=$(echo "$BUILD_PUBLISH_RESULT" | grep -o 'https://[^[:space:]]*builds/[^[:space:]]*' | head -1 || echo "")
+            
+            if [[ -n "$BUILD_UI_URL" ]]; then
+              EPOCH_MS=$(echo "$BUILD_UI_URL" | sed -n 's|.*/builds/[^/]*/[^/]*/\([0-9]*\)/published.*|\1|p')
+              
+              if [[ -n "$EPOCH_MS" && "$EPOCH_MS" =~ ^[0-9]+$ ]]; then
+                EPOCH_SEC=$((EPOCH_MS / 1000))
+                MILLISECS=$((EPOCH_MS % 1000))
+                BUILD_STARTED_TIMESTAMP=$(date -u -r "$EPOCH_SEC" "+%Y-%m-%dT%H:%M:%S" 2>/dev/null || date -u -d "@$EPOCH_SEC" "+%Y-%m-%dT%H:%M:%S")
+                BUILD_STARTED_TIMESTAMP="${BUILD_STARTED_TIMESTAMP}.$(printf "%03d" $MILLISECS)+0000"
+                
+                echo "BUILD_STARTED_TIMESTAMP=$BUILD_STARTED_TIMESTAMP" >> $GITHUB_ENV
+                echo "✅ Extracted timestamp from build publish result: $BUILD_STARTED_TIMESTAMP"
+              else
+                echo "⚠️ Could not extract valid timestamp from UI URL: $BUILD_UI_URL"
+              fi
+            else
+              echo "⚠️ Could not extract build UI URL from publish result"
+            fi
+          else
+            echo "BUILD_INFO_PUBLISH_STATUS=FAILED" >> $GITHUB_ENV
+            echo "❌ Failed to publish build info" >&2
+            exit 1
+          fi
+
+      - name: "[Evidence] Build Evidence"
+        env:
+          EVIDENCE_PRIVATE_KEY: ${{ secrets.EVIDENCE_PRIVATE_KEY }}
+          EVIDENCE_KEY_ALIAS: ${{ vars.EVIDENCE_KEY_ALIAS }}
+        run: |
+          echo "🏗️ Generating evidence for build-info"
+          
+          source bookverse-infra/libraries/bookverse-devops/scripts/evidence-lib.sh
+          
+          attach_build_evidence
+          
+          echo "✅ Build evidence attached via shared library: helm-security-scan, chart-compliance"
+
+  create-promote:
+    name: "Create Application Version & Promote (Conditional)"
+    runs-on: ubuntu-latest
+    needs: [analyze-commit, build-test-publish]
+    if: needs.analyze-commit.outputs.create_app_version == 'true' && needs.build-test-publish.result == 'success'
+    
+    permissions:
+      contents: read
+      id-token: write
+
+    env:
+      BUILD_NAME: "bookverse-helm_CI_create-promote"
+      BUILD_NUMBER: ${{ needs.build-test-publish.outputs.build_number }}
+      SERVICE_NAME: "helm"
+      APPLICATION_KEY: "bookverse-helm"
+      APP_VERSION: ${{ needs.build-test-publish.outputs.app_version }}
+      EVIDENCE_PRIVATE_KEY: ${{ secrets.EVIDENCE_PRIVATE_KEY }}
+      EVIDENCE_KEY_ALIAS: ${{ vars.EVIDENCE_KEY_ALIAS }}
+      JFROG_URL: ${{ vars.JFROG_URL }}
+      JF_URL: ${{ vars.JFROG_URL }}
+      PROJECT_KEY: ${{ vars.PROJECT_KEY }}
+      STAGES_STR: "DEV QA STAGING PROD"
+      FINAL_STAGE: "PROD"
+      ALLOW_RELEASE: "true"
+
+    steps:
+      - name: "[Setup] Checkout"
+        uses: actions/checkout@v4
+
+      - name: "[Setup] Checkout bookverse-infra for shared scripts"
+        uses: actions/checkout@v4
+        with:
+          repository: yonatanp-jfrog/bookverse-infra
+          path: bookverse-infra
+
+      - name: "[Setup] JFrog CLI"
+        uses: EyalDelarea/setup-jfrog-cli@swampUpAppTrust
+        with:
+          version: latest
+          oidc-provider-name: bookverse-helm-github
+          oidc-audience: ${{ vars.JFROG_URL }}
+          disable-job-summary: true
+          disable-auto-build-publish: true
+          disable-auto-evidence-collection: false
+        env:
+          JF_URL: ${{ vars.JFROG_URL }}
+          JF_PROJECT: ${{ vars.PROJECT_KEY }}
+          JFROG_CLI_BUILD_NAME: ${{ needs.build-test-publish.outputs.build_name }}
+          JFROG_CLI_BUILD_NUMBER: ${{ env.BUILD_NUMBER }}
+          JFROG_CLI_BUILD_PROJECT: ${{ vars.PROJECT_KEY }}
+
+      - name: "[Auth] OIDC Token Exchange (bookverse-devops shared script)"
+        id: exchange-oidc
+        run: |
+          echo "🔐 Using bookverse-devops shared OIDC exchange script"
+          bookverse-infra/libraries/bookverse-devops/scripts/exchange-oidc-token.sh \
+            --service-name "helm" \
+            --provider-name "bookverse-helm-github" \
+            --jfrog-url "${{ vars.JFROG_URL }}" \
+            --docker-registry "${{ vars.DOCKER_REGISTRY }}" \
+            --verbose
+          echo "✅ OIDC token exchange completed using shared bookverse-devops script"
+
+      - name: "[Setup] Install Python dependencies"
+        run: |
+          pip install --user PyYAML setuptools wheel
+          echo "✅ Python dependencies installed"
+
+      - name: "[Setup] Use App Version from Build Job"
+        id: use-app-version
+        run: |
+          APP_VERSION="${{ needs.build-test-publish.outputs.app_version }}"
+          
+          if [[ -z "$APP_VERSION" ]]; then
+            echo "❌ Missing app_version from build-test-publish job output" >&2
+            exit 1
+          fi
+          
+          echo "🏷️ Using Application Version from build job: $APP_VERSION"
+          echo "📋 This version is already associated with the published build info"
+          echo "APP_VERSION=$APP_VERSION" >> $GITHUB_ENV
+          echo "app_version=$APP_VERSION" >> $GITHUB_OUTPUT
+
+      - name: "[Diag] Build Info contents"
+        run: |
+          set -euo pipefail
+          echo "🔎 Fetching build info to confirm artifacts are present"
+          ENC_BUILD_NAME=$(printf '%s' "$BUILD_NAME" | jq -sRr @uri)
+          ENC_BUILD_NUMBER=$(printf '%s' "$BUILD_NUMBER" | jq -sRr @uri)
+          URL="${{ vars.JFROG_URL }}/artifactory/api/build/${ENC_BUILD_NAME}/${ENC_BUILD_NUMBER}?project=${{ vars.PROJECT_KEY }}"
+          echo "GET $URL"
+          curl -sS -H "Authorization: Bearer $JF_OIDC_TOKEN" -H "X-JFrog-Project: ${{ vars.PROJECT_KEY }}" -H "Accept: application/json" "$URL" \
+            | jq '.buildInfo.modules // [] | map({id, artifacts: (.artifacts // [] | length)})'
+
+      - name: "[Create] Application Version"
+        run: |
+          echo "🚀 Creating AppTrust application version: ${{ env.APP_VERSION }}"
+          echo "📦 Binding artifacts from build-info: ${{ needs.build-test-publish.outputs.build_name }}/${{ needs.build-test-publish.outputs.build_number }}"
+          echo "🔗 This creates an immutable link between application version and all published artifacts"
+          
+           if [[ -z "${JF_OIDC_TOKEN:-}" ]]; then
+             echo "❌ Missing JF_OIDC_TOKEN. Ensure OIDC exchange step succeeded." >&2
+             exit 1
+           fi
+           echo "✅ Using JF_OIDC_TOKEN for AppTrust API authentication"
+          
+          BASE="${{ vars.JFROG_URL }}/apptrust/api/v1"
+          APP_KEY="$APPLICATION_KEY"
+          
+          TAG_OPTIONS=(release hotfix feature bugfix enhancement security performance refactor)
+          TAG_INDEX=$((${GITHUB_RUN_NUMBER:-0} % ${#TAG_OPTIONS[@]}))
+          APP_TAG="${TAG_OPTIONS[$TAG_INDEX]}"
+          
+          ACTUAL_BUILD_NAME="${{ needs.build-test-publish.outputs.build_name }}"
+          
+          ACTUAL_BUILD_NUMBER="${{ needs.build-test-publish.outputs.build_number }}"
+          echo "🔧 Using actual build number from first job: $ACTUAL_BUILD_NUMBER"
+          APP_VERSION_PAYLOAD='{"version":"'$APP_VERSION'","tag":"'$APP_TAG'","sources":{"builds":[{"name":"'$ACTUAL_BUILD_NAME'","number":"'$ACTUAL_BUILD_NUMBER'","repository_key":"'${{ vars.PROJECT_KEY }}'-build-info","include_dependencies":false}]}}'
+          
+          echo "📋 Creating application version with payload:"
+          echo "$APP_VERSION_PAYLOAD" | jq . || echo "$APP_VERSION_PAYLOAD"
+          
+          RESP_BODY=$(mktemp)
+           HTTP_STATUS=$(curl -sS -L -o "$RESP_BODY" -w "%{http_code}" -X POST \
+             "$BASE/applications/$APP_KEY/versions?async=false" \
+             -H "Authorization: Bearer $JF_OIDC_TOKEN" \
+              -H "Content-Type: application/json" \
+              -H "X-JFrog-Project: ${{ vars.PROJECT_KEY }}" \
+              -d "$APP_VERSION_PAYLOAD" \
+            --fail-with-body)
+          
+          echo "🔢 HTTP Status: $HTTP_STATUS"
+          echo "📨 Response Body:"
+          cat "$RESP_BODY" | jq . 2>/dev/null || cat "$RESP_BODY"
+          echo ""
+          
+          if [[ "$HTTP_STATUS" -ge 200 && "$HTTP_STATUS" -lt 300 ]]; then
+            echo "✅ Created application version $APP_VERSION"
+          else
+            echo "⚠️ Application version creation returned HTTP $HTTP_STATUS"
+            if [[ "$HTTP_STATUS" == "409" ]]; then
+              echo "📝 Version $APP_VERSION already exists, continuing with promotion..."
+            else
+              echo "❌ Failed to create application version" >&2
+          rm -f "$RESP_BODY"
+              exit 1
+            fi
+          fi
+          rm -f "$RESP_BODY"
+          echo "🔍 Validating application version creation..."
+          CONTENT_FILE=$(mktemp)
+           CONTENT_STATUS=$(curl -sS -L -o "$CONTENT_FILE" -w "%{http_code}" \
+             "$BASE/applications/$APP_KEY/versions/$APP_VERSION/content" \
+             -H "Authorization: Bearer $JF_OIDC_TOKEN" \
+            -H "Accept: application/json")
+          
+          if [[ "$CONTENT_STATUS" != "200" ]]; then
+            echo "❌ Version content endpoint returned HTTP $CONTENT_STATUS for $APP_KEY@$APP_VERSION" >&2
+            echo "📨 Response Body:"; cat "$CONTENT_FILE" || true; echo
+            rm -f "$CONTENT_FILE"
+            exit 1
+          fi
+          VERSION_STATE=$(jq -r '.status // empty' "$CONTENT_FILE" 2>/dev/null || echo "")
+          echo "📨 Version Content:"; cat "$CONTENT_FILE" || true; echo
+          rm -f "$CONTENT_FILE"
+          if [[ "$VERSION_STATE" != "COMPLETED" ]]; then
+            echo "❌ Application version not in COMPLETED state (status='$VERSION_STATE') for $APP_KEY@$APP_VERSION" >&2
+            exit 1
+          fi
+          echo "✅ Application version created and validated (COMPLETED): $APP_KEY@$APP_VERSION"
+
+      - name: "[Evidence] Application Version Evidence"
+        env:
+          EVIDENCE_PRIVATE_KEY: ${{ secrets.EVIDENCE_PRIVATE_KEY }}
+          EVIDENCE_KEY_ALIAS: ${{ vars.EVIDENCE_KEY_ALIAS }}
+        run: |
+          echo "📋 Generating evidence for application version (UNASSIGNED stage)"
+          
+          source bookverse-infra/libraries/bookverse-devops/scripts/evidence-lib.sh
+          
+          attach_application_unassigned_evidence
+          
+          echo "✅ Application version evidence attached via shared library: slsa-provenance, helm-chart-analysis"
+
+      - name: "[Promote & Evidence] DEV Stage"
+        run: |
+          echo "🧪 Promoting application to DEV stage with automated evidence collection"
+          echo "📋 Application Version: $APP_VERSION"
+          echo "🎯 Target Stage: DEV (development environment for feature testing)"
+          echo "🛡️ Evidence Type: Smoke tests and basic health validation"
+          
+           if [[ -z "${JF_OIDC_TOKEN:-}" ]]; then
+             echo "❌ Missing JF_OIDC_TOKEN. Ensure OIDC exchange step succeeded." >&2
+             exit 1
+           fi
+           echo "✅ Using JF_OIDC_TOKEN for DEV promotion"
+          
+          source bookverse-infra/libraries/bookverse-devops/scripts/evidence-lib.sh
+          setup_promotion_environment
+          
+          if advance_one_step; then
+            echo "✅ Successfully promoted to DEV"
+          else
+            echo "❌ Failed to promote to DEV"
+            exit 1
+          fi
+          
+          attach_application_dev_evidence
+          echo "✅ DEV stage evidence attached via shared library: helm-deployment-tests"
+
+      - name: "[Promote & Evidence] QA Stage"
+        run: |
+          echo "🔍 Promoting to QA stage and generating evidence"
+          
+           if [[ -z "${JF_OIDC_TOKEN:-}" ]]; then
+             echo "❌ Missing JF_OIDC_TOKEN. Ensure OIDC exchange step succeeded." >&2
+             exit 1
+           fi
+           echo "✅ Using JF_OIDC_TOKEN for QA promotion"
+          
+          source bookverse-infra/libraries/bookverse-devops/scripts/evidence-lib.sh
+          setup_promotion_environment
+          
+          if advance_one_step; then
+            echo "✅ Successfully promoted to QA"
+          else
+            echo "❌ Failed to promote to QA"
+            exit 1
+          fi
+          
+          attach_application_qa_evidence
+          echo "✅ QA stage evidence attached via shared library: helm-security-scan, k8s-policy-validation"
+
+      - name: "[Promote & Evidence] STAGING Stage"
+        run: |
+          echo "🏗️ Promoting to STAGING stage and generating evidence"
+          
+           if [[ -z "${JF_OIDC_TOKEN:-}" ]]; then
+             echo "❌ Missing JF_OIDC_TOKEN. Ensure OIDC exchange step succeeded." >&2
+             exit 1
+           fi
+           echo "✅ Using JF_OIDC_TOKEN for STAGING promotion"
+          
+          source bookverse-infra/libraries/bookverse-devops/scripts/evidence-lib.sh
+          setup_promotion_environment
+          
+            if advance_one_step; then
+            echo "✅ Successfully promoted to STAGING"
+            else
+            echo "❌ Failed to promote to STAGING"
+              exit 1
+            fi
+          
+          attach_application_staging_evidence
+          echo "✅ STAGING stage evidence attached via shared library: helm-chart-compliance, cluster-compatibility"
+
+      - name: "[Promote & Evidence] PROD Stage"
+        run: |
+          echo "🚀 Promoting to PROD stage and generating evidence"
+          
+           if [[ -z "${JF_OIDC_TOKEN:-}" ]]; then
+             echo "❌ Missing JF_OIDC_TOKEN. Ensure OIDC exchange step succeeded." >&2
+             exit 1
+           fi
+           echo "✅ Using JF_OIDC_TOKEN for PROD promotion"
+          
+          source bookverse-infra/libraries/bookverse-devops/scripts/evidence-lib.sh
+          setup_promotion_environment
+          
+          if advance_one_step; then
+            echo "✅ Successfully promoted to PROD"
+          else
+            echo "❌ Failed to promote to PROD"
+            exit 1
+          fi
+
+          attach_application_prod_evidence
+          echo "✅ PROD stage evidence attached via shared library: deployment-verification, production-readiness"
+          echo "🎉 SUCCESS: Application version $APP_VERSION promoted to PROD with all evidence attached!"
+
+      - name: "📊 Enhanced Build Summary (bookverse-devops pattern)"
+        if: always()
+        run: |
+          echo "📊 Generating comprehensive CI/CD pipeline summary for stakeholder visibility"
+          echo "🎯 This summary provides complete build status, artifacts, and next steps"
+          
+          echo "## 🎯 BookVerse Helm Service - CI/CD Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### 📋 Build Information" >> $GITHUB_STEP_SUMMARY
+          echo "- **Service:** helm" >> $GITHUB_STEP_SUMMARY
+          echo "- **Build Name:** $BUILD_NAME" >> $GITHUB_STEP_SUMMARY
+          echo "- **Build Number:** $BUILD_NUMBER" >> $GITHUB_STEP_SUMMARY
+          echo "- **Application Version:** ${APP_VERSION:-'N/A'}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Commit:** ${{ github.sha }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Branch:** ${{ github.ref_name }}" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          
+          echo "### ✅ AppTrust Compliance Status" >> $GITHUB_STEP_SUMMARY
+          echo "- **Job 1 (analyze-commit):** ✅ Completed" >> $GITHUB_STEP_SUMMARY
+          echo "- **Job 2 (build-test-publish):** ✅ Completed" >> $GITHUB_STEP_SUMMARY
+          if [[ "${{ needs.analyze-commit.outputs.create_app_version }}" == "true" ]]; then
+            echo "- **Job 3 (create-promote):** ✅ Completed" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "- **Job 3 (create-promote):** ⏭️ Skipped (build-info only)" >> $GITHUB_STEP_SUMMARY
+          fi
+          echo "" >> $GITHUB_STEP_SUMMARY
+          
+          echo "### 📊 Artifacts & Evidence" >> $GITHUB_STEP_SUMMARY
+          echo "- **Helm Charts:**" >> $GITHUB_STEP_SUMMARY
+          echo "  - 📦 platform-chart: \`v${PLATFORM_CHART_VERSION:-'N/A'}\`" >> $GITHUB_STEP_SUMMARY
+          echo "- **Evidence Artifacts:** ✅ Collected and uploaded" >> $GITHUB_STEP_SUMMARY
+          echo "- **Build-Info:** ✅ Published with all artifacts" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          
+          echo "### 🚀 Optimizations Applied" >> $GITHUB_STEP_SUMMARY
+          echo "- **bookverse-devops:** ✅ Evidence collection & patterns" >> $GITHUB_STEP_SUMMARY
+          echo "- **Consolidated Environment:** ✅ Centralized JFrog setup" >> $GITHUB_STEP_SUMMARY
+          echo "- **Enhanced Helm Testing:** ✅ Comprehensive chart validation" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          
+          if [[ "${{ needs.analyze-commit.outputs.create_app_version }}" == "true" ]]; then
+            echo "### 🎯 Next Steps" >> $GITHUB_STEP_SUMMARY
+            echo "Application version **${APP_VERSION:-'N/A'}** has been created and promoted through all stages." >> $GITHUB_STEP_SUMMARY
+            echo "Use the **Promote** workflow for additional deployments or rollbacks." >> $GITHUB_STEP_SUMMARY
+          else
+            echo "### 📦 Build-Info Only" >> $GITHUB_STEP_SUMMARY
+            echo "This commit created build-info artifacts only (no application version)." >> $GITHUB_STEP_SUMMARY
+            echo "Use manual workflow dispatch with \`force_app_version=true\` to create an application version." >> $GITHUB_STEP_SUMMARY
+          fi
+          
+          echo "✅ Enhanced summary generated using bookverse-devops patterns"

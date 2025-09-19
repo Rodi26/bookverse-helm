@@ -43,17 +43,13 @@ jobs:
           stage=''
           if event_name=='repository_dispatch':
             cp = (data.get('client_payload') or {}) if isinstance(data.get('client_payload'), dict) else {}
-            # Extract stage from JFrog webhook payload structure
             stage = (cp.get('data') or {}).get('stage') or cp.get('stage') or ''
-            # Fallback to top-level payload fields (e.g., JFrog webhook forwarded as-is)
             if not stage:
               top = (data.get('data') or {})
               stage = (top.get('stage') if isinstance(top, dict) else '') or data.get('stage') or ''
-            # Default to PROD for JFrog release_completed if stage missing
             if not stage and str(action).lower()=='release_completed':
               stage='PROD'
             
-            # Debug logging
             print(f"Debug: event_name={event_name}, action={action!r}, stage={stage!r}")
             print(f"Debug: client_payload keys: {list(cp.keys()) if isinstance(cp, dict) else 'not dict'}")
             if isinstance(cp, dict) and 'data' in cp:
@@ -67,11 +63,9 @@ jobs:
             else:
               print("Proceeding: repository_dispatch for PROD")
           else:
-            # Allow non-dispatch events (e.g., manual workflow_dispatch)
             print(f"Proceeding: non-dispatch event={event_name}")
           PY
 
-      # (Removed payload summary here; a concise summary is produced in summarize_pins.)
 
       - name: "[Setup] Checkout bookverse-infra for shared scripts"
         if: env.SKIP != 'true'
@@ -167,7 +161,6 @@ jobs:
           import os, json, re, urllib.request, urllib.error, urllib.parse
           app=os.environ.get('PLATFORM_APP','bookverse-platform')
           version=''
-          # Try resolve from repository_dispatch payload
           ev_path=os.environ.get('GITHUB_EVENT_PATH','')
           if not version and ev_path and os.path.exists(ev_path):
               try:
@@ -175,7 +168,6 @@ jobs:
                   cp=ev.get('client_payload') if isinstance(ev.get('client_payload'), dict) else {}
                   if isinstance(cp, dict):
                       data = cp.get('data') if isinstance(cp.get('data'), dict) else {}
-                      # Support snake_case and camelCase keys
                       version = (
                           data.get('application_version')
                           or data.get('applicationVersion')
@@ -212,7 +204,6 @@ jobs:
                       )
               except Exception:
                   pass
-          # Validate version format from payload; treat invalid or placeholder as missing to trigger fallback
           if version:
               _pat = re.compile(r'^[A-Za-z0-9_][A-Za-z0-9_.\-+]*$')
               _v = str(version).strip()
@@ -220,7 +211,6 @@ jobs:
                   print(f"INFO: Ignoring invalid platform version from payload: {_v!r}")
                   version = ''
           if not version:
-                # Fallback: try latest RELEASED; if that fails, try latest regardless of status via AppTrust API
                 base=os.environ.get('JFROG_URL','').rstrip('/')
                 token=os.environ.get('JF_OIDC_TOKEN','')
                 if not base or not token:
@@ -249,7 +239,6 @@ jobs:
                   candidates = payload.get('results') or payload.get('data') or payload.get('items') or payload.get('versions') or []
               else:
                   candidates = payload
-              # Pick first candidate with a valid version string according to allowed format
               def pick_valid(cands):
                   pattern = re.compile(r'^[A-Za-z0-9_][A-Za-z0-9_.\-+]*$')
                   for it in (cands or []):
@@ -294,7 +283,6 @@ jobs:
         run: |
           python - << 'PY'
           import json, yaml, os
-          # Load content and normalize shapes
           try:
               with open('platform_components.json', 'r', encoding='utf-8') as f:
                   raw = json.load(f)
@@ -307,7 +295,6 @@ jobs:
           elif isinstance(comp.get('releasables'), list):
               releasables = comp.get('releasables')
 
-          # Known app->values key mapping
           app_to_values_key={
             'bookverse-inventory':'inventory',
             'bookverse-recommendations':'recommendations',
@@ -321,7 +308,6 @@ jobs:
                       return obj[k]
               return None
 
-          # 1) Extract component versions from sources.versions (preferred for app keys)
           versions_by_app={}
           _sources = comp.get('sources') if isinstance(comp, dict) else None
           src = _sources.get('versions') if isinstance(_sources, dict) else None
@@ -332,7 +318,6 @@ jobs:
                   if ak and ver:
                       versions_by_app[str(ak)]=str(ver)
 
-          # 2) Extract versions by service name from releasables (authoritative for image tags)
           versions_by_service={}
           if isinstance(releasables, list):
               for item in releasables:
@@ -345,15 +330,12 @@ jobs:
                   if name and ver:
                       versions_by_service[name] = ver
 
-          # Helper to write tags into values
           def update_file(path):
             y=yaml.safe_load(open(path)) or {}
-            # Set platform version if present in content
             plat_ver = coalesce_keys(comp, 'version','platform_version') if isinstance(comp, dict) else None
             if plat_ver is not None:
                 y.setdefault('platform', {})['version']=str(plat_ver)
 
-            # Apply service-name versions (preferred)
             name_map = {
               'web': ('web', None),
               'inventory': ('inventory', None),
@@ -369,21 +351,17 @@ jobs:
                     else:
                         y.setdefault(root, {})['tag']=str(ver)
 
-            # Fallback: Map app keys to values keys if service-name mapping missing
             for app_key, values_key in app_to_values_key.items():
                 if values_key == 'recommendations':
-                    # top-level recommendations
                     if not ((y.get('recommendations') or {}).get('tag')):
                         ver = versions_by_app.get(app_key)
                         if ver:
                             y.setdefault('recommendations', {})['tag']=str(ver)
-                    # nested worker, only if not already set
                     if not (((y.get('recommendations') or {}).get('worker') or {}).get('tag')):
                         verw = versions_by_service.get('recommendations-worker') or versions_by_app.get(app_key)
                         if verw:
                             y.setdefault('recommendations', {}).setdefault('worker', {})['tag']=str(verw)
                     continue
-                # other services
                 if not ((y.get(values_key) or {}).get('tag')):
                     ver = versions_by_app.get(app_key)
                     if ver:
@@ -392,9 +370,7 @@ jobs:
             with open(path,'w') as f:
                 yaml.safe_dump(y, f, sort_keys=False)
 
-            # No summary output here; keep summary concise in summarize_pins
 
-          # Update single values file only
           update_file('charts/platform/values.yaml')
           PY
 
@@ -437,10 +413,8 @@ jobs:
           echo "📋 Generating compliance evidence for Helm chart using shared evidence library"
           source bookverse-infra/libraries/bookverse-devops/scripts/evidence-lib.sh
           
-          # Create evidence directory for Helm compliance
           mkdir -p evidence/helm-compliance
           
-          # Generate Helm-specific compliance evidence
           cat > evidence/helm-compliance/helm-chart-validation.json << EOF
           {
             "chart_name": "platform",
@@ -455,7 +429,6 @@ jobs:
           }
           EOF
           
-          # Generate SLSA provenance for Helm chart
           cat > evidence/helm-compliance/slsa-provenance.json << EOF
           {
             "predicateType": "https://slsa.dev/provenance/v0.2",
@@ -482,7 +455,6 @@ jobs:
           }
           EOF
           
-          # Create manifest for evidence artifacts
           cat > evidence/helm-compliance/manifest.json << EOF
           {
             "evidence_type": "helm_chart_compliance",
@@ -529,7 +501,6 @@ jobs:
                       return obj[k]
               return None
 
-          # 1) Payload (concise)
           payload = {}
           ev_path=os.environ.get('GITHUB_EVENT_PATH')
           if ev_path and os.path.exists(ev_path):
@@ -545,7 +516,6 @@ jobs:
                   'stage': (data.get('stage') or cp.get('stage') or ev.get('stage') or '').lower()
               }
 
-          # 2) Extracted component versions from platform_components.json
           versions_by_app = {}
           versions_by_service = {}
           try:
@@ -578,7 +548,6 @@ jobs:
                   if name and ver:
                       versions_by_service[name] = ver
 
-          # 3) Pinned tags from values.yaml
           y = read_yaml('charts/platform/values.yaml')
           def get_tag(doc, svc):
               if svc == 'recommendations.worker':
