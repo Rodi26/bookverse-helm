@@ -114,7 +114,7 @@ jobs:
         uses: EyalDelarea/setup-jfrog-cli@swampUpAppTrust
         with:
           version: latest
-          oidc-provider-name: bookverse-helm-github
+          oidc-provider-name: bookverse-recommendations-github
           oidc-audience: ${{ vars.JFROG_URL }}
           disable-job-summary: true
           disable-auto-build-publish: true
@@ -138,7 +138,7 @@ jobs:
           echo "🔐 Using bookverse-devops shared OIDC exchange script"
           bookverse-infra/libraries/bookverse-devops/scripts/exchange-oidc-token.sh \
             --service-name "helm" \
-            --provider-name "bookverse-helm-github" \
+            --provider-name "bookverse-recommendations-github" \
             --jfrog-url "${{ vars.JFROG_URL }}" \
             --docker-registry "${{ vars.DOCKER_REGISTRY }}" \
             --verbose
@@ -343,7 +343,7 @@ jobs:
         uses: EyalDelarea/setup-jfrog-cli@swampUpAppTrust
         with:
           version: latest
-          oidc-provider-name: bookverse-helm-github
+          oidc-provider-name: bookverse-recommendations-github
           oidc-audience: ${{ vars.JFROG_URL }}
           disable-job-summary: true
           disable-auto-build-publish: true
@@ -361,7 +361,7 @@ jobs:
           echo "🔐 Using bookverse-devops shared OIDC exchange script"
           bookverse-infra/libraries/bookverse-devops/scripts/exchange-oidc-token.sh \
             --service-name "helm" \
-            --provider-name "bookverse-helm-github" \
+            --provider-name "bookverse-recommendations-github" \
             --jfrog-url "${{ vars.JFROG_URL }}" \
             --docker-registry "${{ vars.DOCKER_REGISTRY }}" \
             --verbose
