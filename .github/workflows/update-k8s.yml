@@ -190,10 +190,10 @@ jobs:
                   print(f"INFO: Ignoring invalid platform version from payload: {_v!r}")
                   version = ''
           if not version:
-                base=os.environ.get('JFROG_URL','').rstrip('/')
-                token=os.environ.get('JF_OIDC_TOKEN','')
-                if not base or not token:
-                    raise SystemExit('Missing JFROG_URL or JF_OIDC_TOKEN')
+              base=os.environ.get('JFROG_URL','').rstrip('/')
+              token=os.environ.get('JF_OIDC_TOKEN','')
+              if not base or not token:
+                  raise SystemExit('Missing JFROG_URL or JF_OIDC_TOKEN')
               def http_get_json(url: str):
                   headers={"Authorization": f"Bearer {token}", "Accept": "application/json"}
                   req=urllib.request.Request(url, headers=headers)
