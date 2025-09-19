@@ -1,0 +1,8 @@
+applications:
+  - key: bookverse-helm
+    seeds:
+      application: 1.0.0
+    packages:
+      - type: helm
+        name: platform-chart
+        seed: 0.1.0
