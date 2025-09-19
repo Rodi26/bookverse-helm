@@ -400,17 +400,6 @@ jobs:
 
       - name: "[Create] Application Version"
         run: |
-          echo "🚧 AppTrust application version creation temporarily disabled"
-          echo "⚠️  OIDC provider 'bookverse-helm-github' lacks AppTrust API permissions"
-          echo "🔧 JFrog administrator needs to configure AppTrust permissions for this provider"
-          echo "✅ Skipping AppTrust step to allow CI completion"
-          echo ""
-          echo "📋 Would create application version: $APPLICATION_VERSION"
-          echo "📦 Would bind artifacts from build-info: ${{ needs.build-test-publish.outputs.build_name }}/${{ needs.build-test-publish.outputs.build_number }}"
-          exit 0
-          
-          # TODO: Re-enable when OIDC provider has AppTrust permissions
-          # Original AppTrust logic below:
           echo "🚀 Creating AppTrust application version: ${{ env.APP_VERSION }}"
           echo "📦 Binding artifacts from build-info: ${{ needs.build-test-publish.outputs.build_name }}/${{ needs.build-test-publish.outputs.build_number }}"
           echo "🔗 This creates an immutable link between application version and all published artifacts"
