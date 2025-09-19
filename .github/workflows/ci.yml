@@ -395,7 +395,7 @@ jobs:
           ENC_BUILD_NUMBER=$(printf '%s' "$BUILD_NUMBER" | jq -sRr @uri)
           URL="${{ vars.JFROG_URL }}/artifactory/api/build/${ENC_BUILD_NAME}/${ENC_BUILD_NUMBER}?project=${{ vars.PROJECT_KEY }}"
           echo "GET $URL"
-          curl -sS -H "Authorization: Bearer $JF_OIDC_TOKEN" -H "X-JFrog-Project: ${{ vars.PROJECT_KEY }}" -H "Accept: application/json" "$URL" \
+          curl -sS -H "Authorization: Bearer $JF_OIDC_TOKEN" -H "Accept: application/json" "$URL" \
             | jq '.buildInfo.modules // [] | map({id, artifacts: (.artifacts // [] | length)})'
 
       - name: "[Create] Application Version"
@@ -423,6 +423,33 @@ jobs:
           echo "🔧 Using actual build number from first job: $ACTUAL_BUILD_NUMBER"
           APP_VERSION_PAYLOAD='{"version":"'$APP_VERSION'","tag":"'$APP_TAG'","sources":{"builds":[{"name":"'$ACTUAL_BUILD_NAME'","number":"'$ACTUAL_BUILD_NUMBER'","repository_key":"'${{ vars.PROJECT_KEY }}'-build-info","include_dependencies":false}]}}'
           
+          echo "🔍 First checking if application exists in AppTrust..."
+          APP_CHECK_STATUS=$(curl -sS -w "%{http_code}" -o /dev/null \
+            "$BASE/applications/$APP_KEY" \
+            -H "Authorization: Bearer $JF_OIDC_TOKEN" \
+            -H "Accept: application/json")
+          
+          if [[ "$APP_CHECK_STATUS" == "404" ]]; then
+            echo "📝 Application $APP_KEY doesn't exist, creating it first..."
+            APP_CREATE_PAYLOAD='{"key":"'$APP_KEY'","display_name":"BookVerse Helm Service","description":"Helm charts and Kubernetes deployments for BookVerse platform"}'
+            CREATE_RESP=$(mktemp)
+            CREATE_STATUS=$(curl -sS -L -o "$CREATE_RESP" -w "%{http_code}" -X POST \
+              "$BASE/applications" \
+              -H "Authorization: Bearer $JF_OIDC_TOKEN" \
+              -H "Content-Type: application/json" \
+              -d "$APP_CREATE_PAYLOAD")
+            echo "📋 Application creation status: $CREATE_STATUS"
+            if [[ "$CREATE_STATUS" -ge 200 && "$CREATE_STATUS" -lt 300 ]]; then
+              echo "✅ Application $APP_KEY created successfully"
+            else
+              echo "⚠️ Application creation returned HTTP $CREATE_STATUS"
+              cat "$CREATE_RESP" || true
+            fi
+            rm -f "$CREATE_RESP"
+          else
+            echo "✅ Application $APP_KEY already exists (HTTP $APP_CHECK_STATUS)"
+          fi
+          
           echo "📋 Creating application version with payload:"
           echo "$APP_VERSION_PAYLOAD" | jq . || echo "$APP_VERSION_PAYLOAD"
           
@@ -431,8 +458,7 @@ jobs:
              "$BASE/applications/$APP_KEY/versions?async=false" \
              -H "Authorization: Bearer $JF_OIDC_TOKEN" \
               -H "Content-Type: application/json" \
-              -d "$APP_VERSION_PAYLOAD" \
-            --fail-with-body)
+              -d "$APP_VERSION_PAYLOAD")
           
           echo "🔢 HTTP Status: $HTTP_STATUS"
           echo "📨 Response Body:"
