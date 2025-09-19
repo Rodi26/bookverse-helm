@@ -115,30 +115,6 @@ jobs:
           jf rt ping
           echo "✅ JFrog authentication successful"
 
-      - name: Validate AppTrust API permissions
-        if: env.SKIP != 'true'
-        env:
-          JFROG_URL: ${{ vars.JFROG_URL }}
-        run: |
-          set -euo pipefail
-          BASE="${JFROG_URL%/}"
-          if [[ -z "${BASE}" ]]; then echo "Missing vars.JFROG_URL" >&2; exit 1; fi
-          if [[ -z "${JF_OIDC_TOKEN:-}" ]]; then
-            echo "JF_OIDC_TOKEN is not set. OIDC token exchange may have failed." >&2
-            exit 1
-          fi
-          URL="${BASE}/apptrust/api/v1/applications?limit=1"
-          CODE=$(curl -sS -o /tmp/jf_token_check.json -w "%{http_code}" \
-            -H "Authorization: Bearer ${JF_OIDC_TOKEN}" \
-            -H "X-JFrog-Project: ${{ vars.PROJECT_KEY }}" \
-            -H "Accept: application/json" \
-            "$URL")
-          if [[ "$CODE" != "200" ]]; then
-            echo "AppTrust API access check failed: HTTP ${CODE}" >&2
-            (head -c 400 /tmp/jf_token_check.json || true) >&2
-            exit 1
-          fi
-          echo "✅ AppTrust API access validation succeeded."
 
       - name: Set up Python
         if: env.SKIP != 'true'
