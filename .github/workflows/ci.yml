@@ -736,6 +736,9 @@ jobs:
           echo "✅ STAGING stage evidence skipped (would attach: helm-chart-compliance, cluster-compatibility)"
 
       - name: "[Promote & Evidence] PROD Stage"
+        env:
+          ALLOW_RELEASE: true
+          FINAL_STAGE: PROD
         run: |
           echo "🚀 Promoting to PROD stage and generating evidence"
           
