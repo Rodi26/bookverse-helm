@@ -27,7 +27,7 @@ web:
     type: ClusterIP
 inventory:
   repository: apptrustswampupc.jfrog.io/bookverse-inventory-internal-docker-release-local/inventory
-  tag: 5.38.71
+  tag: 115-1
   replicas: 1
   port: 8000
 recommendations:
