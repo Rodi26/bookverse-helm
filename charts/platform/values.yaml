@@ -1,11 +1,11 @@
 global:
   imageRegistry: apptrustswampupc.jfrog.io
 platform:
-  version: 1.0.11
+  version: 2.1.53
 platformWebhook: {}
 web:
   repository: apptrustswampupc.jfrog.io/bookverse-web-internal-docker-release-local/web
-  tag: 5.49.26
+  tag: 35-1
   replicas: 1
   port: 8080
   env:
@@ -15,11 +15,11 @@ web:
     CHECKOUT_BASE_URL: http://bookverse.demo/checkout
   ingress:
     enabled: true
-    className: 'traefik'
-    host: 'bookverse.demo'
+    className: traefik
+    host: bookverse.demo
     annotations:
       traefik.ingress.kubernetes.io/router.entrypoints: web
-      traefik.ingress.kubernetes.io/redirect-to-https: "false"
+      traefik.ingress.kubernetes.io/redirect-to-https: 'false'
     tls:
       enabled: false
       secretName: ''
@@ -27,12 +27,12 @@ web:
     type: ClusterIP
 inventory:
   repository: apptrustswampupc.jfrog.io/bookverse-inventory-internal-docker-release-local/inventory
-  tag: 5.38.71
+  tag: 115-1
   replicas: 1
   port: 8000
 recommendations:
   repository: apptrustswampupc.jfrog.io/bookverse-recommendations-internal-docker-release-local/recommendations
-  tag: 4.40.184
+  tag: 20-1
   replicas: 1
   port: 8000
   env:
@@ -42,7 +42,7 @@ recommendations:
   worker:
     enabled: true
     repository: apptrustswampupc.jfrog.io/bookverse-recommendations-internal-docker-release-local/recommendations-worker
-    tag: 3.9.150
+    tag: 20-1
     replicas: 1
     refreshSeconds: 60
   config:
@@ -69,7 +69,7 @@ recommendations:
         '
 checkout:
   repository: apptrustswampupc.jfrog.io/bookverse-checkout-internal-docker-release-local/checkout
-  tag: 148-1
+  tag: 18-1
   replicas: 1
   port: 8000
   env:
