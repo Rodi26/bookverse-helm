@@ -24,6 +24,36 @@ spec:
     - host: {{ .Values.web.ingress.host | default "" | quote }}
       http:
         paths:
+          # Backend API routes (must come before catch-all)
+          - path: /api/v1/books
+            pathType: Prefix
+            backend:
+              service:
+                name: inventory
+                port:
+                  number: 80
+          - path: /static
+            pathType: Prefix
+            backend:
+              service:
+                name: inventory
+                port:
+                  number: 80
+          - path: /recommendations
+            pathType: Prefix
+            backend:
+              service:
+                name: recommendations
+                port:
+                  number: 80
+          - path: /checkout
+            pathType: Prefix
+            backend:
+              service:
+                name: checkout
+                port:
+                  number: 80
+          # Web application (catch-all, must be last)
           - path: /
             pathType: Prefix
             backend:

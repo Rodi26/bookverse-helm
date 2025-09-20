@@ -10,14 +10,16 @@ web:
   port: 8080
   env:
     BOOKVERSE_ENV: DEV
-    INVENTORY_BASE_URL: http://inventory
-    RECOMMENDATIONS_BASE_URL: http://recommendations
-    CHECKOUT_BASE_URL: http://checkout
+    INVENTORY_BASE_URL: http://bookverse.demo
+    RECOMMENDATIONS_BASE_URL: http://bookverse.demo/recommendations
+    CHECKOUT_BASE_URL: http://bookverse.demo/checkout
   ingress:
-    enabled: false
-    className: ''
-    host: ''
-    annotations: {}
+    enabled: true
+    className: 'traefik'
+    host: 'bookverse.demo'
+    annotations:
+      traefik.ingress.kubernetes.io/router.entrypoints: web
+      traefik.ingress.kubernetes.io/redirect-to-https: "false"
     tls:
       enabled: false
       secretName: ''
