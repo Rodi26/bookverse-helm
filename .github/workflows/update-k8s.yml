@@ -23,6 +23,9 @@ permissions:
 jobs:
   pin_and_package:
     runs-on: ubuntu-latest
+    outputs:
+      SKIP: ${{ env.SKIP }}
+      SKIP_REASON: ${{ env.SKIP_REASON }}
     steps:
       - uses: actions/checkout@v4
 
@@ -79,6 +82,7 @@ jobs:
             if should_skip:
               with open(os.environ['GITHUB_ENV'],'a') as f:
                 f.write('SKIP=true\n')
+                f.write(f'SKIP_REASON={skip_reason}\n')
               print(f"Skipping repository_dispatch: {skip_reason}")
             else:
               print("Proceeding: repository_dispatch for PROD bookverse-platform")
@@ -414,99 +418,173 @@ jobs:
         run: |
           git fetch origin main --depth=1
           git checkout -qf origin/main
-      - name: Summarize pinned image tags
+      - name: Generate job summary
         env:
           SKIP: ${{ needs.pin_and_package.outputs.SKIP || '' }}
+          SKIP_REASON: ${{ needs.pin_and_package.outputs.SKIP_REASON || '' }}
         run: |
           python - << 'PY'
           import os, json, yaml
 
-          def read_yaml(path):
-              try:
-                  with open(path, 'r', encoding='utf-8') as f:
-                      return yaml.safe_load(f) or {}
-              except Exception:
-                  return {}
+          skip = os.environ.get('SKIP', '').lower() == 'true'
+          skip_reason = os.environ.get('SKIP_REASON', '')
 
-          def coalesce(obj, *keys):
-              for k in keys:
-                  if isinstance(obj, dict) and k in obj and obj[k] not in (None, ''):
-                      return obj[k]
-              return None
-
-          payload = {}
-          ev_path=os.environ.get('GITHUB_EVENT_PATH')
-          if ev_path and os.path.exists(ev_path):
-              try:
-                  ev=json.load(open(ev_path))
-              except Exception:
-                  ev={}
-              cp=ev.get('client_payload') if isinstance(ev.get('client_payload'), dict) else {}
-              data=cp.get('data') if isinstance(cp.get('data'), dict) else {}
-              payload={
-                  'application_key': data.get('application_key') or data.get('applicationKey') or cp.get('application_key') or cp.get('applicationKey') or '',
-                  'application_version': data.get('application_version') or data.get('applicationVersion') or cp.get('application_version') or cp.get('applicationVersion') or '',
-                  'stage': (data.get('stage') or cp.get('stage') or ev.get('stage') or '').lower()
-              }
-
-          versions_by_app = {}
-          versions_by_service = {}
-          try:
-              with open('platform_components.json','r',encoding='utf-8') as f:
-                  raw = json.load(f)
-          except Exception:
-              raw = {}
-          comp = raw if isinstance(raw, dict) else {}
-          releasables = []
-          if isinstance(raw, list):
-              releasables = raw
-          elif isinstance(comp.get('releasables'), list):
-              releasables = comp.get('releasables')
-          _sources = comp.get('sources') if isinstance(comp, dict) else None
-          src = _sources.get('versions') if isinstance(_sources, dict) else None
-          if isinstance(src, list):
-              for entry in src:
-                  ak = coalesce(entry, 'application_key','applicationKey','application')
-                  ver = coalesce(entry, 'application_version','applicationVersion','version')
-                  if ak and ver:
-                      versions_by_app[str(ak)] = str(ver)
-          if isinstance(releasables, list):
-              for item in releasables:
-                  if not isinstance(item, dict):
-                      continue
-                  if item.get('package_type') != 'docker' or item.get('releasable_type') != 'package_version':
-                      continue
-                  name = str(item.get('name') or '').strip()
-                  ver = str(item.get('version') or '').strip()
-                  if name and ver:
-                      versions_by_service[name] = ver
-
-          y = read_yaml('charts/platform/values.yaml')
-          def get_tag(doc, svc):
-              if svc == 'recommendations.worker':
-                  return (((doc.get('recommendations') or {}).get('worker') or {}).get('tag')) or ''
-              if svc == 'recommendations':
-                  return ((doc.get('recommendations') or {}).get('tag')) or ''
-              return ((doc.get(svc) or {}).get('tag')) or ''
-
-          sections = []
-          sections.append("### Payload")
-          sections.append("""```json\n%s\n```""" % json.dumps(payload, indent=2, ensure_ascii=False))
-
-          sections.append("### Extracted components")
-          if versions_by_service:
-              for k in sorted(versions_by_service.keys()):
-                  sections.append(f"- {k}: {versions_by_service[k]}")
-          elif versions_by_app:
-              for k in sorted(versions_by_app.keys()):
-                  sections.append(f"- {k}: {versions_by_app[k]}")
+          if skip:
+              # Generate summary for skipped process
+              sections = []
+              sections.append("## K8s Update Process Skipped")
+              sections.append("")
+              sections.append("The Helm chart update process was skipped because:")
+              sections.append(f"**{skip_reason}**")
+              sections.append("")
+              sections.append("### Requirements for K8s updates:")
+              sections.append("- Event must be a `repository_dispatch` with action `release_completed`")
+              sections.append("- Stage must be `PROD`")
+              sections.append("- Application key must be `bookverse-platform`")
+              sections.append("")
+              
+              # Show payload for debugging
+              payload = {}
+              ev_path=os.environ.get('GITHUB_EVENT_PATH')
+              if ev_path and os.path.exists(ev_path):
+                  try:
+                      ev=json.load(open(ev_path))
+                  except Exception:
+                      ev={}
+                  cp=ev.get('client_payload') if isinstance(ev.get('client_payload'), dict) else {}
+                  data=cp.get('data') if isinstance(cp.get('data'), dict) else {}
+                  payload={
+                      'application_key': data.get('application_key') or data.get('applicationKey') or cp.get('application_key') or cp.get('applicationKey') or '',
+                      'application_version': data.get('application_version') or data.get('applicationVersion') or cp.get('application_version') or cp.get('applicationVersion') or '',
+                      'stage': (data.get('stage') or cp.get('stage') or ev.get('stage') or '').upper()
+                  }
+              
+              sections.append("### Event payload received:")
+              sections.append("```json")
+              sections.append(json.dumps(payload, indent=2, ensure_ascii=False))
+              sections.append("```")
+              
           else:
-              sections.append("- (none found)")
+              # Generate summary for successful process
+              def read_yaml(path):
+                  try:
+                      with open(path, 'r', encoding='utf-8') as f:
+                          return yaml.safe_load(f) or {}
+                  except Exception:
+                      return {}
 
-          sections.append("### Pinned image tags")
-          sections.append(f"platform.version = {(y.get('platform') or {}).get('version','')}")
-          for svc in ['web','inventory','recommendations','checkout','recommendations.worker']:
-              sections.append(f"- {svc}: tag={get_tag(y, svc)}")
+              def coalesce(obj, *keys):
+                  for k in keys:
+                      if isinstance(obj, dict) and k in obj and obj[k] not in (None, ''):
+                          return obj[k]
+                  return None
+
+              payload = {}
+              ev_path=os.environ.get('GITHUB_EVENT_PATH')
+              if ev_path and os.path.exists(ev_path):
+                  try:
+                      ev=json.load(open(ev_path))
+                  except Exception:
+                      ev={}
+                  cp=ev.get('client_payload') if isinstance(ev.get('client_payload'), dict) else {}
+                  data=cp.get('data') if isinstance(cp.get('data'), dict) else {}
+                  payload={
+                      'application_key': data.get('application_key') or data.get('applicationKey') or cp.get('application_key') or cp.get('applicationKey') or '',
+                      'application_version': data.get('application_version') or data.get('applicationVersion') or cp.get('application_version') or cp.get('applicationVersion') or '',
+                      'stage': (data.get('stage') or cp.get('stage') or ev.get('stage') or '').lower()
+                  }
+
+              # Load platform components data
+              try:
+                  with open('platform_components.json','r',encoding='utf-8') as f:
+                      raw = json.load(f)
+              except Exception:
+                  raw = {}
+              comp = raw if isinstance(raw, dict) else {}
+              
+              # Extract application versions from sources (release bundles)
+              app_versions = {}
+              sources = comp.get('sources', [])
+              if isinstance(sources, list):
+                  for source in sources:
+                      if isinstance(source, dict) and source.get('type') == 'release_bundle':
+                          rb = source.get('release_bundle', {})
+                          if isinstance(rb, dict):
+                              name = rb.get('name', '')
+                              version = rb.get('version', '')
+                              if name and version:
+                                  app_versions[name] = version
+              
+              # Extract docker image tags from releasables
+              docker_tags = {}
+              releasables = comp.get('releasables', [])
+              if isinstance(releasables, list):
+                  for item in releasables:
+                      if not isinstance(item, dict):
+                          continue
+                      if item.get('package_type') != 'docker' or item.get('releasable_type') != 'package_version':
+                          continue
+                      name = str(item.get('name') or '').strip()
+                      ver = str(item.get('version') or '').strip()
+                      if name and ver:
+                          docker_tags[name] = ver
+
+              y = read_yaml('charts/platform/values.yaml')
+              def get_tag(doc, svc):
+                  if svc == 'recommendations.worker':
+                      return (((doc.get('recommendations') or {}).get('worker') or {}).get('tag')) or ''
+                  if svc == 'recommendations':
+                      return ((doc.get('recommendations') or {}).get('tag')) or ''
+                  return ((doc.get(svc) or {}).get('tag')) or ''
+
+              sections = []
+              sections.append("## K8s Update Completed")
+              sections.append("")
+              
+              # Platform version
+              platform_version = comp.get('version', '')
+              sections.append(f"**Platform Version:** `{platform_version}`")
+              sections.append("")
+              
+              # Application versions and their docker tags
+              sections.append("### Application Versions → Docker Tags")
+              
+              # Map application names to service names for display
+              app_to_service = {
+                  'bookverse-inventory': 'inventory',
+                  'bookverse-recommendations': 'recommendations', 
+                  'bookverse-checkout': 'checkout',
+                  'bookverse-web': 'web'
+              }
+              
+              for app_name in sorted(app_versions.keys()):
+                  app_version = app_versions[app_name]
+                  service_name = app_to_service.get(app_name, app_name)
+                  docker_tag = docker_tags.get(service_name, 'N/A')
+                  sections.append(f"- **{app_name}** `{app_version}` → `{service_name}:{docker_tag}`")
+              
+              # Worker services that share docker tags
+              if 'recommendations' in docker_tags:
+                  rec_tag = docker_tags['recommendations']
+                  sections.append(f"- **recommendations-worker** (same as recommendations) → `recommendations-worker:{rec_tag}`")
+              
+              if 'checkout' in docker_tags:
+                  checkout_tag = docker_tags['checkout']
+                  sections.append(f"- **checkout-migrations** (same as checkout) → `checkout-migrations:{checkout_tag}`")
+                  sections.append(f"- **checkout-worker** (same as checkout) → `checkout-worker:{checkout_tag}`")
+              
+              sections.append("")
+              sections.append("### Helm Chart Values Applied")
+              sections.append(f"- `platform.version`: `{(y.get('platform') or {}).get('version','')}`")
+              for svc in ['web','inventory','recommendations','checkout','recommendations.worker']:
+                  tag = get_tag(y, svc)
+                  sections.append(f"- `{svc}.tag`: `{tag}`")
+              
+              sections.append("")
+              sections.append("### Event Payload")
+              sections.append("```json")
+              sections.append(json.dumps(payload, indent=2, ensure_ascii=False))
+              sections.append("```")
 
           summary = os.environ.get('GITHUB_STEP_SUMMARY','')
           text = "\n".join(sections) + "\n"
