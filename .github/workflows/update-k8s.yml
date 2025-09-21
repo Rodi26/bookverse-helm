@@ -352,53 +352,80 @@ jobs:
             for svc_name, tag in versions_by_service.items():
                 print(f"  {svc_name}: {tag}")
             
-            # Validate that we have all required application versions
-            required_apps = ['bookverse-inventory', 'bookverse-recommendations', 'bookverse-checkout', 'bookverse-web']
-            missing_apps = []
-            for app_key in required_apps:
-                if app_key not in versions_by_app or not versions_by_app[app_key]:
-                    missing_apps.append(app_key)
+            # TEMPORARY: Due to platform application bug, use docker image versions directly
+            # TODO: Revert to application versions from sources.versions when platform bug is fixed
+            print("⚠️  TEMPORARY: Using docker image versions due to platform application bug")
+            print("   (sources.versions not calculated correctly - will be fixed)")
             
-            if missing_apps:
-                print(f"❌ ERROR: Missing application versions for platform release:")
-                for app in missing_apps:
-                    print(f"  - {app}")
-                print(f"Platform bundle must contain versions for all applications.")
-                print(f"Available applications: {list(versions_by_app.keys())}")
-                raise SystemExit("Platform bundle incomplete - missing required application versions")
+            # Map service names to application keys for validation
+            service_to_app = {
+                'inventory': 'bookverse-inventory',
+                'recommendations': 'bookverse-recommendations', 
+                'checkout': 'bookverse-checkout',
+                'web': 'bookverse-web'
+            }
             
-            print("✅ All required application versions found in platform bundle")
+            # Validate that we have docker images for all required services
+            required_services = ['inventory', 'recommendations', 'checkout', 'web']
+            missing_services = []
+            invalid_services = []
             
-            # Pin using ONLY application versions - no fallbacks
+            for svc in required_services:
+                if svc not in versions_by_service:
+                    missing_services.append(svc)
+                else:
+                    # Check if it's a valid version (not SHA-based)
+                    version = versions_by_service[svc]
+                    if version.startswith('sha256__'):
+                        invalid_services.append(f"{svc} (SHA-based: {version[:20]}...)")
+            
+            if missing_services or invalid_services:
+                print(f"❌ ERROR: Missing or invalid docker image versions:")
+                for svc in missing_services:
+                    print(f"  - Missing: {svc}")
+                for svc in invalid_services:
+                    print(f"  - Invalid: {svc}")
+                print(f"Available docker images: {list(versions_by_service.keys())}")
+                print(f"Platform bundle must contain valid docker image versions for all services.")
+                raise SystemExit("Platform bundle incomplete - missing or invalid docker image versions")
+            
+            print("✅ All required docker image versions found in platform bundle")
+            
+            # Pin using docker image versions (temporary workaround)
             print("🐳 DOCKER IMAGE PINNING RESULTS:")
             print("=" * 60)
             
             for app_key, values_key in app_to_values_key.items():
-                app_version = versions_by_app[app_key]  # Will fail if missing (which we want)
-                
                 if values_key == 'recommendations':
+                    # Get versions for recommendations and worker
+                    rec_version = versions_by_service.get('recommendations')
+                    worker_version = versions_by_service.get('recommendations-worker', rec_version)
+                    
                     # Get the repository from existing values
                     rec_repo = ((y.get('recommendations') or {}).get('repository')) or f"apptrustswampupc.jfrog.io/{values_key}"
                     worker_repo = (((y.get('recommendations') or {}).get('worker') or {}).get('repository')) or f"apptrustswampupc.jfrog.io/{values_key}-worker"
                     
-                    y.setdefault('recommendations', {})['tag']=str(app_version)
-                    y.setdefault('recommendations', {}).setdefault('worker', {})['tag']=str(app_version)
+                    y.setdefault('recommendations', {})['tag']=str(rec_version)
+                    y.setdefault('recommendations', {}).setdefault('worker', {})['tag']=str(worker_version)
                     
                     print(f"📌 {values_key}:")
-                    print(f"   Source: Application version from platform bundle {app_key}")
-                    print(f"   Docker Image: {rec_repo}:{app_version}")
+                    print(f"   Source: Docker image version from platform bundle (temporary workaround)")
+                    print(f"   Docker Image: {rec_repo}:{rec_version}")
                     print(f"📌 {values_key}.worker:")
-                    print(f"   Source: Application version from platform bundle {app_key} (shared with main service)")
-                    print(f"   Docker Image: {worker_repo}:{app_version}")
+                    print(f"   Source: Docker image version from platform bundle (worker-specific or shared)")
+                    print(f"   Docker Image: {worker_repo}:{worker_version}")
                 else:
+                    # Get docker image version for this service
+                    docker_version = versions_by_service[values_key]
+                    
                     # Get the repository from existing values
                     repo = ((y.get(values_key) or {}).get('repository')) or f"apptrustswampupc.jfrog.io/{values_key}"
                     
-                    y.setdefault(values_key, {})['tag']=str(app_version)
+                    y.setdefault(values_key, {})['tag']=str(docker_version)
                     
                     print(f"📌 {values_key}:")
-                    print(f"   Source: Application version from platform bundle {app_key}")
-                    print(f"   Docker Image: {repo}:{app_version}")
+                    print(f"   Source: Docker image version from platform bundle (temporary workaround)")
+                    print(f"   Docker Image: {repo}:{docker_version}")
             
             print("=" * 60)
 
