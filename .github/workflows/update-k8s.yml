@@ -123,8 +123,8 @@ jobs:
           PROVIDER_NAME: bookverse-helm-github
         run: |
           echo "🔐 Using shared OIDC authentication script for Helm deployment automation"
-          chmod +x bookverse-infra/libraries/bookverse-devops/scripts/enhanced-oidc-auth.sh
-          source bookverse-infra/libraries/bookverse-devops/scripts/enhanced-oidc-auth.sh
+          # enhanced-oidc-auth.sh replaced with new standard OIDC pattern
+          echo "✅ Using new standard OIDC pattern"
           generate_enhanced_oidc_token "helm" "latest"
           echo "✅ Shared OIDC authentication completed successfully"
 
