@@ -111,7 +111,7 @@ jobs:
           echo "APPLICATION_KEY=bookverse-helm" >> $GITHUB_ENV
 
       - name: "[Setup] JFrog CLI"
-        uses: EyalDelarea/setup-jfrog-cli@swampUpAppTrust
+        uses: bookverse-infra/.github/actions/generate-oidc-token@main
         with:
           version: latest
           oidc-provider-name: bookverse-helm-github
@@ -132,17 +132,15 @@ jobs:
           jf rt ping
           echo "✅ JFrog authentication successful"
 
-      - name: "[Auth] OIDC Token Exchange (bookverse-devops shared script)"
-        id: exchange-oidc
-        run: |
-          echo "🔐 Using bookverse-devops shared OIDC exchange script"
-          bookverse-infra/libraries/bookverse-devops/scripts/exchange-oidc-token.sh \
-            --service-name "helm" \
-            --provider-name "bookverse-helm-github" \
-            --jfrog-url "${{ vars.JFROG_URL }}" \
-            --docker-registry "${{ vars.DOCKER_REGISTRY }}" \
-            --verbose
-          echo "✅ OIDC token exchange completed using shared bookverse-devops script"
+      - name: "[Auth] Enhanced OIDC Token Generation"
+        id: enhanced-oidc
+        uses: bookverse-infra/.github/actions/generate-oidc-token@main
+        with:
+          oidc-provider-url: ${{ vars.JFROG_URL }}
+          oidc-provider-name: bookverse-helm-github
+          service-name: helm
+          application-key: bookverse-helm
+          version: latest
           
       - name: "[Setup] Install Python dependencies"
         run: |
@@ -340,7 +338,7 @@ jobs:
           path: bookverse-infra
 
       - name: "[Setup] JFrog CLI"
-        uses: EyalDelarea/setup-jfrog-cli@swampUpAppTrust
+        uses: bookverse-infra/.github/actions/generate-oidc-token@main
         with:
           version: latest
           oidc-provider-name: bookverse-helm-github
@@ -355,11 +353,11 @@ jobs:
           JFROG_CLI_BUILD_NUMBER: ${{ env.BUILD_NUMBER }}
           JFROG_CLI_BUILD_PROJECT: ${{ vars.PROJECT_KEY }}
 
-      - name: "[Auth] OIDC Token Exchange (bookverse-devops shared script)"
+      - name: "[Auth] Enhanced OIDC Token Generation"
         id: exchange-oidc
         run: |
           echo "🔐 Using bookverse-devops shared OIDC exchange script"
-          bookverse-infra/libraries/bookverse-devops/scripts/exchange-oidc-token.sh \
+          bookverse-infra/libraries/bookverse-devops/scripts/enhanced-oidc-auth.sh \
             --service-name "helm" \
             --provider-name "bookverse-helm-github" \
             --jfrog-url "${{ vars.JFROG_URL }}" \

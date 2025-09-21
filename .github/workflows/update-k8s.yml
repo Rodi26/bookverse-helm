@@ -123,13 +123,9 @@ jobs:
           PROVIDER_NAME: bookverse-helm-github
         run: |
           echo "🔐 Using shared OIDC authentication script for Helm deployment automation"
-          chmod +x bookverse-infra/libraries/bookverse-devops/scripts/exchange-oidc-token.sh
-          bookverse-infra/libraries/bookverse-devops/scripts/exchange-oidc-token.sh \
-            --service-name "helm" \
-            --provider-name "$PROVIDER_NAME" \
-            --jfrog-url "$JF_URL" \
-            --docker-registry "${{ vars.DOCKER_REGISTRY }}" \
-            --verbose
+          chmod +x bookverse-infra/libraries/bookverse-devops/scripts/enhanced-oidc-auth.sh
+          source bookverse-infra/libraries/bookverse-devops/scripts/enhanced-oidc-auth.sh
+          generate_enhanced_oidc_token "helm" "latest"
           echo "✅ Shared OIDC authentication completed successfully"
 
       - name: Verify JFrog Authentication
