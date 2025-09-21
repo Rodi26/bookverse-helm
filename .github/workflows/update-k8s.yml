@@ -102,6 +102,7 @@ jobs:
       - name: Setup JFrog CLI (OIDC)
         if: env.SKIP != 'true'
         uses: EyalDelarea/setup-jfrog-cli@swampUpAppTrust
+        id: jfrog-cli-auth
         env:
           JF_URL: ${{ vars.JFROG_URL }}
           JF_PROJECT: ${{ vars.PROJECT_KEY }}
