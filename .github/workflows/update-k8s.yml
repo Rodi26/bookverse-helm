@@ -122,11 +122,8 @@ jobs:
           PROJECT_KEY: ${{ vars.PROJECT_KEY }}
           PROVIDER_NAME: bookverse-helm-github
         run: |
-          echo "🔐 Using shared OIDC authentication script for Helm deployment automation"
-          # enhanced-oidc-auth.sh replaced with new standard OIDC pattern
-          echo "✅ Using new standard OIDC pattern"
-          generate_enhanced_oidc_token "helm" "latest"
-          echo "✅ Shared OIDC authentication completed successfully"
+          echo "🔐 OIDC authentication handled by JFrog CLI setup step above"
+          echo "✅ Using new standard OIDC pattern with EyalDelarea/setup-jfrog-cli@swampUpAppTrust"
 
       - name: Verify JFrog Authentication
         if: env.SKIP != 'true'
