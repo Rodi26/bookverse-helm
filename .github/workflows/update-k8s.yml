@@ -115,15 +115,26 @@ jobs:
           disable-auto-evidence-collection: false
           oidc-audience: ${{ vars.JFROG_URL }}
 
-      - name: "[Auth] OIDC Token Exchange (Shared Script)"
+      - name: "[Setup] Extract OIDC Token from JFrog CLI"
         if: env.SKIP != 'true'
-        env:
-          JF_URL: ${{ vars.JFROG_URL }}
-          PROJECT_KEY: ${{ vars.PROJECT_KEY }}
-          PROVIDER_NAME: bookverse-helm-github
+        id: extract-token
         run: |
-          echo "🔐 OIDC authentication handled by JFrog CLI setup step above"
-          echo "✅ Using new standard OIDC pattern with EyalDelarea/setup-jfrog-cli@swampUpAppTrust"
+          echo "🔍 Extracting OIDC token from JFrog CLI step output..."
+          
+          # Use the oidc-token output as specified
+          OIDC_TOKEN="${{ steps.jfrog-cli-auth.outputs.oidc-token }}"
+          if [[ -n "$OIDC_TOKEN" && "$OIDC_TOKEN" != "null" ]]; then
+            echo "✅ Successfully retrieved OIDC token from JFrog CLI step output (oidc-token)"
+            echo "📋 Token length: ${#OIDC_TOKEN} characters"
+            echo "JF_OIDC_TOKEN=$OIDC_TOKEN" >> $GITHUB_ENV
+          else
+            echo "❌ OIDC token not available from JFrog CLI step output (oidc-token)"
+            echo "🔍 Available outputs from jfrog-cli-auth step:"
+            echo "  oidc-user: '${{ steps.jfrog-cli-auth.outputs.oidc-user }}'"
+            echo "  oidc-token: '${{ steps.jfrog-cli-auth.outputs.oidc-token }}'"
+            echo "  token: '${{ steps.jfrog-cli-auth.outputs.token }}'"
+            exit 1
+          fi
 
       - name: Verify JFrog Authentication
         if: env.SKIP != 'true'
@@ -208,51 +219,14 @@ jobs:
                   print(f"INFO: Ignoring invalid platform version from payload: {_v!r}")
                   version = ''
           if not version:
-              base=os.environ.get('JFROG_URL','').rstrip('/')
-              token=os.environ.get('JF_OIDC_TOKEN','')
-              project_key=os.environ.get('PROJECT_KEY','bookverse')
-              if not base or not token:
-                  raise SystemExit('Missing JFROG_URL or JF_OIDC_TOKEN')
-              def http_get_json(url: str):
-                  headers={"Authorization": f"Bearer {token}", "Accept": "application/json"}
-                  req=urllib.request.Request(url, headers=headers)
-                  try:
-                      with urllib.request.urlopen(req, timeout=30) as resp:
-                          raw = resp.read().decode('utf-8') or '{}'
-                      try:
-                          return json.loads(raw)
-                      except Exception:
-                          return {}
-                  except urllib.error.HTTPError as e:
-                      body = ''
-                      try:
-                          body = e.read().decode('utf-8', 'ignore')
-                      except Exception:
-                          pass
-                      print(f"WARN: GET {url} -> {e.code} {body[:200]}")
-                      return {}
-              base_q = f"{base}/apptrust/api/v1/applications/{urllib.parse.quote(app)}/versions?limit=1"
-              payload = http_get_json(base_q + "&release_status=RELEASED") or http_get_json(base_q)
-              if isinstance(payload, dict):
-                  candidates = payload.get('results') or payload.get('data') or payload.get('items') or payload.get('versions') or []
-              else:
-                  candidates = payload
-              def pick_valid(cands):
-                  pattern = re.compile(r'^[A-Za-z0-9_][A-Za-z0-9_.\-+]*$')
-                  for it in (cands or []):
-                      val = it.get('version') or it.get('name') or ''
-                      if val is None:
-                          continue
-                      v = str(val).strip()
-                      if not v or v == '<no value>':
-                          continue
-                      if not pattern.match(v):
-                          continue
-                      return v
-                  return ''
-              version = pick_valid(candidates)
-              if not version:
-                  raise SystemExit('Unable to resolve a valid platform version from AppTrust')
+              # If no version was extracted from event payload, fail rather than fallback
+              # This prevents deploying wrong versions when specific versions are requested
+              print("❌ No platform version found in event payload")
+              print("Event payload should contain:")
+              print("- client_payload.data.application_version OR")  
+              print("- client_payload.application_version OR")
+              print("- data.application_version")
+              raise SystemExit('No platform version found in repository_dispatch event payload. Cannot proceed without explicit version.')
           geh = os.environ.get('GITHUB_ENV')
           if geh:
               with open(geh, 'a', encoding='utf-8') as ef:
@@ -268,13 +242,43 @@ jobs:
           JF_OIDC_TOKEN: ${{ env.JF_OIDC_TOKEN }}
         run: |
           set -euo pipefail
-          echo "Fetching platform content for ${APPTRUST_APPLICATION}@${RESOLVED_PV}"
+          echo "🔍 Fetching platform content for ${APPTRUST_APPLICATION}@${RESOLVED_PV}"
+          
+          # Validate authentication token
+          if [[ -z "${JF_OIDC_TOKEN:-}" ]]; then
+            echo "❌ JF_OIDC_TOKEN is not set. OIDC token extraction step may have failed." >&2
+            exit 1
+          fi
+          echo "✅ JF_OIDC_TOKEN is available (length: ${#JF_OIDC_TOKEN} characters)"
+          
           URL="${JFROG_URL%/}/apptrust/api/v1/applications/${APPTRUST_APPLICATION}/versions/${RESOLVED_PV}/content?include=releasables,sources"
-          CODE=$(curl -sS -o platform_components.json -w "%{http_code}" \
+          echo "📡 API URL: $URL"
+          
+          TEMP_RESPONSE=$(mktemp)
+          CODE=$(curl -sS -o "$TEMP_RESPONSE" -w "%{http_code}" \
             -H "Authorization: Bearer ${JF_OIDC_TOKEN}" \
             -H "Accept: application/json" \
             "$URL")
-          echo "Content fetch HTTP ${CODE}"
+          
+          echo "📊 Content fetch HTTP ${CODE}"
+          
+          if [[ "$CODE" -ge 200 && "$CODE" -lt 300 ]]; then
+            echo "✅ Successfully fetched platform content"
+            cp "$TEMP_RESPONSE" platform_components.json
+          else
+            echo "❌ Failed to fetch platform content (HTTP $CODE)"
+            echo "Response body:"
+            cat "$TEMP_RESPONSE"
+            echo ""
+            echo "🔍 Debugging info:"
+            echo "  Application: ${APPTRUST_APPLICATION}"
+            echo "  Version: ${RESOLVED_PV}"
+            echo "  Token prefix: ${JF_OIDC_TOKEN:0:10}..."
+            rm -f "$TEMP_RESPONSE"
+            exit 1
+          fi
+          
+          rm -f "$TEMP_RESPONSE"
 
       - name: Pin image tags in values.yaml
         if: env.SKIP != 'true'
@@ -333,37 +337,69 @@ jobs:
             plat_ver = coalesce_keys(comp, 'version','platform_version') if isinstance(comp, dict) else None
             if plat_ver is not None:
                 y.setdefault('platform', {})['version']=str(plat_ver)
+            
+            print(f"📋 Platform version: {plat_ver}")
+            print(f"📋 Application versions found: {versions_by_app}")
+            print(f"📋 Docker image tags found: {versions_by_service}")
 
-            name_map = {
-              'web': ('web', None),
-              'inventory': ('inventory', None),
-              'recommendations': ('recommendations', None),
-              'checkout': ('checkout', None),
-              'recommendations-worker': ('recommendations', 'worker'),
-            }
-            for svc_name, (root, child) in name_map.items():
-                ver = versions_by_service.get(svc_name)
-                if ver:
-                    if child:
-                        y.setdefault(root, {}).setdefault(child, {})['tag']=str(ver)
-                    else:
-                        y.setdefault(root, {})['tag']=str(ver)
-
+            # ONLY use application versions from platform bundle - NO FALLBACKS
+            print("🔍 Available application versions from platform bundle:")
+            for app_key, version in versions_by_app.items():
+                print(f"  {app_key}: {version}")
+            
+            print("🔍 Available docker tags from releasables:")
+            for svc_name, tag in versions_by_service.items():
+                print(f"  {svc_name}: {tag}")
+            
+            # Validate that we have all required application versions
+            required_apps = ['bookverse-inventory', 'bookverse-recommendations', 'bookverse-checkout', 'bookverse-web']
+            missing_apps = []
+            for app_key in required_apps:
+                if app_key not in versions_by_app or not versions_by_app[app_key]:
+                    missing_apps.append(app_key)
+            
+            if missing_apps:
+                print(f"❌ ERROR: Missing application versions for platform release:")
+                for app in missing_apps:
+                    print(f"  - {app}")
+                print(f"Platform bundle must contain versions for all applications.")
+                print(f"Available applications: {list(versions_by_app.keys())}")
+                raise SystemExit("Platform bundle incomplete - missing required application versions")
+            
+            print("✅ All required application versions found in platform bundle")
+            
+            # Pin using ONLY application versions - no fallbacks
+            print("🐳 DOCKER IMAGE PINNING RESULTS:")
+            print("=" * 60)
+            
             for app_key, values_key in app_to_values_key.items():
+                app_version = versions_by_app[app_key]  # Will fail if missing (which we want)
+                
                 if values_key == 'recommendations':
-                    if not ((y.get('recommendations') or {}).get('tag')):
-                        ver = versions_by_app.get(app_key)
-                        if ver:
-                            y.setdefault('recommendations', {})['tag']=str(ver)
-                    if not (((y.get('recommendations') or {}).get('worker') or {}).get('tag')):
-                        verw = versions_by_service.get('recommendations-worker') or versions_by_app.get(app_key)
-                        if verw:
-                            y.setdefault('recommendations', {}).setdefault('worker', {})['tag']=str(verw)
-                    continue
-                if not ((y.get(values_key) or {}).get('tag')):
-                    ver = versions_by_app.get(app_key)
-                    if ver:
-                        y.setdefault(values_key, {})['tag']=str(ver)
+                    # Get the repository from existing values
+                    rec_repo = ((y.get('recommendations') or {}).get('repository')) or f"apptrustswampupc.jfrog.io/{values_key}"
+                    worker_repo = (((y.get('recommendations') or {}).get('worker') or {}).get('repository')) or f"apptrustswampupc.jfrog.io/{values_key}-worker"
+                    
+                    y.setdefault('recommendations', {})['tag']=str(app_version)
+                    y.setdefault('recommendations', {}).setdefault('worker', {})['tag']=str(app_version)
+                    
+                    print(f"📌 {values_key}:")
+                    print(f"   Source: Application version from platform bundle {app_key}")
+                    print(f"   Docker Image: {rec_repo}:{app_version}")
+                    print(f"📌 {values_key}.worker:")
+                    print(f"   Source: Application version from platform bundle {app_key} (shared with main service)")
+                    print(f"   Docker Image: {worker_repo}:{app_version}")
+                else:
+                    # Get the repository from existing values
+                    repo = ((y.get(values_key) or {}).get('repository')) or f"apptrustswampupc.jfrog.io/{values_key}"
+                    
+                    y.setdefault(values_key, {})['tag']=str(app_version)
+                    
+                    print(f"📌 {values_key}:")
+                    print(f"   Source: Application version from platform bundle {app_key}")
+                    print(f"   Docker Image: {repo}:{app_version}")
+            
+            print("=" * 60)
 
             with open(path,'w') as f:
                 yaml.safe_dump(y, f, sort_keys=False)
@@ -539,8 +575,9 @@ jobs:
               sections.append(f"**Platform Version:** `{platform_version}`")
               sections.append("")
               
-              # Application versions and their docker tags
-              sections.append("### Application Versions → Docker Tags")
+              # Show actual docker images that were pinned
+              sections.append("### Docker Images Pinned")
+              sections.append("")
               
               # Map application names to service names for display
               app_to_service = {
@@ -550,21 +587,27 @@ jobs:
                   'bookverse-web': 'web'
               }
               
+              # Show the actual docker images from values.yaml
               for app_name in sorted(app_versions.keys()):
                   app_version = app_versions[app_name]
                   service_name = app_to_service.get(app_name, app_name)
-                  docker_tag = docker_tags.get(service_name, 'N/A')
-                  sections.append(f"- **{app_name}** `{app_version}` → `{service_name}:{docker_tag}`")
-              
-              # Worker services that share docker tags
-              if 'recommendations' in docker_tags:
-                  rec_tag = docker_tags['recommendations']
-                  sections.append(f"- **recommendations-worker** (same as recommendations) → `recommendations-worker:{rec_tag}`")
-              
-              if 'checkout' in docker_tags:
-                  checkout_tag = docker_tags['checkout']
-                  sections.append(f"- **checkout-migrations** (same as checkout) → `checkout-migrations:{checkout_tag}`")
-                  sections.append(f"- **checkout-worker** (same as checkout) → `checkout-worker:{checkout_tag}`")
+                  
+                  # Get the actual repository and tag from values.yaml
+                  if service_name == 'recommendations':
+                      repo = (y.get('recommendations') or {}).get('repository', f'apptrustswampupc.jfrog.io/{service_name}')
+                      tag = (y.get('recommendations') or {}).get('tag', 'unknown')
+                      worker_repo = ((y.get('recommendations') or {}).get('worker') or {}).get('repository', f'apptrustswampupc.jfrog.io/{service_name}-worker')
+                      worker_tag = ((y.get('recommendations') or {}).get('worker') or {}).get('tag', 'unknown')
+                      
+                      sections.append(f"- **{app_name}** `{app_version}` → `{repo}:{tag}`")
+                      sections.append(f"  - Source: Application version from platform bundle")
+                      sections.append(f"- **{app_name}-worker** `{app_version}` → `{worker_repo}:{worker_tag}`")
+                      sections.append(f"  - Source: Application version from platform bundle (shared with main service)")
+                  else:
+                      repo = (y.get(service_name) or {}).get('repository', f'apptrustswampupc.jfrog.io/{service_name}')
+                      tag = (y.get(service_name) or {}).get('tag', 'unknown')
+                      sections.append(f"- **{app_name}** `{app_version}` → `{repo}:{tag}`")
+                      sections.append(f"  - Source: Application version from platform bundle")
               
               sections.append("")
               sections.append("### Helm Chart Values Applied")
