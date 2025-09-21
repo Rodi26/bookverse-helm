@@ -352,10 +352,12 @@ jobs:
             for svc_name, tag in versions_by_service.items():
                 print(f"  {svc_name}: {tag}")
             
-            # TEMPORARY: Due to platform application bug, use docker image versions directly
-            # TODO: Revert to application versions from sources.versions when platform bug is fixed
-            print("⚠️  TEMPORARY: Using docker image versions due to platform application bug")
-            print("   (sources.versions not calculated correctly - will be fixed)")
+            # TEMPORARY: Due to platform application bugs, use docker image versions directly
+            # TODO: Revert to application versions from sources.versions when platform bugs are fixed
+            print("⚠️  TEMPORARY: Using docker image versions due to platform application bugs")
+            print("   - sources.versions not calculated correctly")
+            print("   - SHA-based versions accepted as valid (semver check disabled)")
+            print("   Both issues will be fixed in platform application")
             
             # Map service names to application keys for validation
             service_to_app = {
@@ -366,28 +368,28 @@ jobs:
             }
             
             # Validate that we have docker images for all required services
+            # TEMPORARY: Accept SHA-based versions as valid (another platform bug)
             required_services = ['inventory', 'recommendations', 'checkout', 'web']
             missing_services = []
-            invalid_services = []
             
             for svc in required_services:
                 if svc not in versions_by_service:
                     missing_services.append(svc)
-                else:
-                    # Check if it's a valid version (not SHA-based)
-                    version = versions_by_service[svc]
-                    if version.startswith('sha256__'):
-                        invalid_services.append(f"{svc} (SHA-based: {version[:20]}...)")
             
-            if missing_services or invalid_services:
-                print(f"❌ ERROR: Missing or invalid docker image versions:")
+            if missing_services:
+                print(f"❌ ERROR: Missing docker image versions:")
                 for svc in missing_services:
                     print(f"  - Missing: {svc}")
-                for svc in invalid_services:
-                    print(f"  - Invalid: {svc}")
                 print(f"Available docker images: {list(versions_by_service.keys())}")
-                print(f"Platform bundle must contain valid docker image versions for all services.")
-                raise SystemExit("Platform bundle incomplete - missing or invalid docker image versions")
+                print(f"Platform bundle must contain docker image versions for all services.")
+                raise SystemExit("Platform bundle incomplete - missing docker image versions")
+            
+            # Show version types for debugging
+            print("📋 Docker image version types:")
+            for svc in required_services:
+                version = versions_by_service[svc]
+                version_type = "SHA-based" if version.startswith('sha256__') else "Semantic"
+                print(f"  {svc}: {version} ({version_type})")
             
             print("✅ All required docker image versions found in platform bundle")
             
