@@ -2,6 +2,10 @@ name: Update K8s
 
 run-name: Platform Release ${{ github.event.client_payload.data.application_version }}
 
+concurrency:
+  group: update-k8s-${{ vars.PROJECT_KEY || 'bookverse' }}
+  cancel-in-progress: false
+
 on:
   repository_dispatch:
     types: [release_completed]
