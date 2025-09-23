@@ -1,11 +1,11 @@
 global:
   imageRegistry: apptrustswampupc.jfrog.io
 platform:
-  version: 2.1.40
+  version: 2.1.17
 platformWebhook: {}
 web:
   repository: apptrustswampupc.jfrog.io/bookverse-web-internal-docker-release-local/web
-  tag: 5.49.51
+  tag: 1.8.18
   replicas: 1
   port: 8080
   env:
@@ -27,12 +27,12 @@ web:
     type: ClusterIP
 inventory:
   repository: apptrustswampupc.jfrog.io/bookverse-inventory-internal-docker-release-local/inventory
-  tag: 5.38.101
+  tag: 1.5.14
   replicas: 1
   port: 8000
 recommendations:
   repository: apptrustswampupc.jfrog.io/bookverse-recommendations-internal-docker-release-local/recommendations
-  tag: sha256__a4140bbadb029c6a6e2356f1797487504adca2e5c5ea2ff47457a8ddd1ac95ba
+  tag: 2.7.19
   replicas: 1
   port: 8000
   env:
@@ -42,38 +42,34 @@ recommendations:
   worker:
     enabled: true
     repository: apptrustswampupc.jfrog.io/bookverse-recommendations-internal-docker-release-local/recommendations-worker
-    tag: 3.9.162
+    tag: 1.8.27
     replicas: 1
     refreshSeconds: 60
   config:
     enabled: true
     mountPath: /app/config
     data:
-      recommendations-settings.yaml: |
-        weights:
-          genre: 1.0
-          author: 0.25
-          popularity: 0.10
-        limits:
-          default: 10
-          max: 50
-        features:
-          filter_out_of_stock: true
-          enable_cache: false
-          ttl_seconds: 60
+      recommendations-settings.yaml: "weights:\n  genre: 1.0\n  author: 0.25\n  popularity:\
+        \ 0.10\nlimits:\n  default: 10\n  max: 50\nfeatures:\n  filter_out_of_stock:\
+        \ true\n  enable_cache: false\n  ttl_seconds: 60\n"
   resources:
     enabled: true
     mountPath: /app/resources
     data:
-      stopwords.txt: |
-        the
+      stopwords.txt: 'the
+
         and
+
         of
+
         to
+
         a
+
+        '
 checkout:
   repository: apptrustswampupc.jfrog.io/bookverse-checkout-internal-docker-release-local/checkout
-  tag: 2.38.44
+  tag: 2.0.10
   replicas: 1
   port: 8000
   env:
