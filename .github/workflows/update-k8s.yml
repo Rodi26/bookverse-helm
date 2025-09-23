@@ -127,7 +127,7 @@ jobs:
           OIDC_TOKEN="${{ steps.jfrog-cli-auth.outputs.oidc-token }}"
           if [[ -n "$OIDC_TOKEN" && "$OIDC_TOKEN" != "null" ]]; then
             echo "✅ Successfully retrieved OIDC token from JFrog CLI step output (oidc-token)"
-            echo "📋 Token length: ${
+            echo "📋 Token length: ${#OIDC_TOKEN}"
             echo "JF_OIDC_TOKEN=$OIDC_TOKEN" >> $GITHUB_ENV
           else
             echo "❌ OIDC token not available from JFrog CLI step output (oidc-token)"
@@ -248,7 +248,7 @@ jobs:
             echo "❌ JF_OIDC_TOKEN is not set. OIDC token extraction step may have failed." >&2
             exit 1
           fi
-          echo "✅ JF_OIDC_TOKEN is available (length: ${
+          echo "✅ JF_OIDC_TOKEN is available (length: ${#JF_OIDC_TOKEN})"
           
           URL="${JFROG_URL%/}/apptrust/api/v1/applications/${APPTRUST_APPLICATION}/versions/${RESOLVED_PV}/content?include=releasables,sources"
           echo "📡 API URL: $URL"
@@ -476,12 +476,12 @@ jobs:
 
           if skip:
               sections = []
-              sections.append("
+              sections.append("## ❌ Helm Chart Update Skipped")
               sections.append("")
               sections.append("The Helm chart update process was skipped because:")
               sections.append(f"**{skip_reason}**")
               sections.append("")
-              sections.append("
+              sections.append("### 📋 Required Conditions")
               sections.append("- Event must be a `repository_dispatch` with action `release_completed`")
               sections.append("- Stage must be `PROD`")
               sections.append("- Application key must be `bookverse-platform`")
@@ -502,7 +502,7 @@ jobs:
                       'stage': (data.get('stage') or cp.get('stage') or ev.get('stage') or '').upper()
                   }
               
-              sections.append("
+              sections.append("### 📊 Event Details")
               sections.append("```json")
               sections.append(json.dumps(payload, indent=2, ensure_ascii=False))
               sections.append("```")
@@ -577,14 +577,14 @@ jobs:
                   return ((doc.get(svc) or {}).get('tag')) or ''
 
               sections = []
-              sections.append("
+              sections.append("## ✅ Helm Chart Updated Successfully")
               sections.append("")
               
               platform_version = comp.get('version', '')
               sections.append(f"**Platform Version:** `{platform_version}`")
               sections.append("")
               
-              sections.append("
+              sections.append("### 📦 Application Versions")
               sections.append("")
               
               app_to_service = {
@@ -615,14 +615,14 @@ jobs:
                       sections.append(f"  - Source: Application version from platform bundle")
               
               sections.append("")
-              sections.append("
+              sections.append("### 🏷️ Final Image Tags in values.yaml")
               sections.append(f"- `platform.version`: `{(y.get('platform') or {}).get('version','')}`")
               for svc in ['web','inventory','recommendations','checkout','recommendations.worker']:
                   tag = get_tag(y, svc)
                   sections.append(f"- `{svc}.tag`: `{tag}`")
               
               sections.append("")
-              sections.append("
+              sections.append("### 📊 Event Details")
               sections.append("```json")
               sections.append(json.dumps(payload, indent=2, ensure_ascii=False))
               sections.append("```")

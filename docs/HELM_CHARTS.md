@@ -1,6 +1,6 @@
 # BookVerse Platform - Helm Charts Guide
 
-**Chart structure, value configuration patterns, and template customization for Kubernetes deployment automation**
+## Chart structure, value configuration patterns, and template customization for Kubernetes deployment automation
 
 The BookVerse Platform provides comprehensive Helm charts that automate Kubernetes deployment across all microservices with sophisticated configuration management, environment-specific customization, and production-ready deployment patterns integrated with GitOps workflows.
 
@@ -8,9 +8,9 @@ The BookVerse Platform provides comprehensive Helm charts that automate Kubernet
 
 ## 📋 Table of Contents
 
-- [Helm Chart Architecture](#-helm-chart-architecture)
+- [Helm Chart Architecture](#️-helm-chart-architecture)
 - [Chart Structure Overview](#-chart-structure-overview)
-- [Configuration Management](#-configuration-management)
+- [Configuration Management](#️-configuration-management)
 - [Template Customization](#-template-customization)
 - [Environment-Specific Deployments](#-environment-specific-deployments)
 - [Service Dependencies](#-service-dependencies)
@@ -129,7 +129,7 @@ keywords:
 
 Each BookVerse service follows a standardized Helm chart structure:
 
-```
+```text
 charts/inventory/
 ├── Chart.yaml                    # Chart metadata and dependencies
 ├── values.yaml                   # Default configuration values
@@ -1576,6 +1576,7 @@ spec:
 **Problem**: Pods stuck in Pending state due to resource constraints.
 
 **Diagnosis**:
+
 ```bash
 # Check pod status and events
 kubectl describe pod <pod-name> -n <namespace>
@@ -1588,6 +1589,7 @@ kubectl describe resourcequota -n <namespace>
 ```
 
 **Solution**:
+
 ```yaml
 # Adjust resource requests in values.yaml
 resources:
@@ -1601,6 +1603,7 @@ resources:
 **Problem**: Services cannot communicate with each other.
 
 **Diagnosis**:
+
 ```bash
 # Test service connectivity
 kubectl exec -it <pod-name> -n <namespace> -- nc -z <service-name> <port>
@@ -1613,6 +1616,7 @@ kubectl get networkpolicy -n <namespace>
 ```
 
 **Solution**:
+
 ```yaml
 # Update network policy to allow communication
 networkPolicy:
@@ -1632,6 +1636,7 @@ networkPolicy:
 **Problem**: Application cannot connect to database.
 
 **Diagnosis**:
+
 ```bash
 # Check database pod status
 kubectl get pods -l app.kubernetes.io/name=postgresql -n <namespace>
@@ -1644,6 +1649,7 @@ kubectl exec -it <app-pod> -n <namespace> -- pg_isready -h <db-host> -p 5432
 ```
 
 **Solution**:
+
 ```yaml
 # Configure external database connection
 database:
@@ -1660,6 +1666,7 @@ database:
 **Problem**: External traffic cannot reach services.
 
 **Diagnosis**:
+
 ```bash
 # Check ingress status
 kubectl get ingress -n <namespace>
@@ -1672,6 +1679,7 @@ nslookup <ingress-host>
 ```
 
 **Solution**:
+
 ```yaml
 # Update ingress configuration
 ingress:
@@ -1725,6 +1733,7 @@ With comprehensive Helm charts implemented, you can:
 5. **Extend GitOps**: Implement advanced ArgoCD patterns and progressive delivery
 
 For additional information, see:
+
 - [GitOps Deployment Guide](GITOPS_DEPLOYMENT.md) - ArgoCD integration patterns
 - [Scaling Guide](SCALING_GUIDE.md) - Horizontal and vertical scaling
 - [Monitoring Setup Guide](../MONITORING_SETUP.md) - Observability configuration

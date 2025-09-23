@@ -49,24 +49,28 @@ recommendations:
     enabled: true
     mountPath: /app/config
     data:
-      recommendations-settings.yaml: "weights:\n  genre: 1.0\n  author: 0.25\n  popularity:\
-        \ 0.10\nlimits:\n  default: 10\n  max: 50\nfeatures:\n  filter_out_of_stock:\
-        \ true\n  enable_cache: false\n  ttl_seconds: 60\n"
+      recommendations-settings.yaml: |
+        weights:
+          genre: 1.0
+          author: 0.25
+          popularity: 0.10
+        limits:
+          default: 10
+          max: 50
+        features:
+          filter_out_of_stock: true
+          enable_cache: false
+          ttl_seconds: 60
   resources:
     enabled: true
     mountPath: /app/resources
     data:
-      stopwords.txt: 'the
-
+      stopwords.txt: |
+        the
         and
-
         of
-
         to
-
         a
-
-        '
 checkout:
   repository: apptrustswampupc.jfrog.io/bookverse-checkout-internal-docker-release-local/checkout
   tag: 2.38.44
