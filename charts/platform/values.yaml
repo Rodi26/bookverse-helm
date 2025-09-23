@@ -10,9 +10,10 @@ web:
   port: 8080
   env:
     BOOKVERSE_ENV: DEV
-    INVENTORY_BASE_URL: http://bookverse.demo
-    RECOMMENDATIONS_BASE_URL: http://bookverse.demo/recommendations
-    CHECKOUT_BASE_URL: http://bookverse.demo/checkout
+    PLATFORM_BASE_URL: http://platform-web.bookverse-prod.svc.cluster.local
+    INVENTORY_BASE_URL: http://inventory.bookverse-prod.svc.cluster.local
+    RECOMMENDATIONS_BASE_URL: http://recommendations.bookverse-prod.svc.cluster.local
+    CHECKOUT_BASE_URL: http://checkout.bookverse-prod.svc.cluster.local
   ingress:
     enabled: true
     className: traefik
