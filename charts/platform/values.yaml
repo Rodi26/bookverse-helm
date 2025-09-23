@@ -41,9 +41,9 @@ recommendations:
   cache:
     ttlSeconds: 60
   worker:
-    enabled: false
+    enabled: true
     repository: apptrustswampupc.jfrog.io/bookverse-recommendations-internal-docker-release-local/recommendations-worker
-    tag: 1.8.26
+    tag: 1.8.27-fixed
     replicas: 1
     refreshSeconds: 60
   config:
