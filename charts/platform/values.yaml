@@ -32,7 +32,7 @@ inventory:
   port: 8000
 recommendations:
   repository: apptrustswampupc.jfrog.io/bookverse-recommendations-internal-docker-release-local/recommendations
-  tag: 2.7.19
+  tag: 1.5.14
   replicas: 1
   port: 8000
   env:
@@ -42,7 +42,7 @@ recommendations:
   worker:
     enabled: true
     repository: apptrustswampupc.jfrog.io/bookverse-recommendations-internal-docker-release-local/recommendations-worker
-    tag: 1.8.27
+    tag: 1.5.14
     replicas: 1
     refreshSeconds: 60
   config:
@@ -69,7 +69,7 @@ recommendations:
         '
 checkout:
   repository: apptrustswampupc.jfrog.io/bookverse-checkout-internal-docker-release-local/checkout
-  tag: 2.0.10
+  tag: 1.5.14
   replicas: 1
   port: 8000
   env:
