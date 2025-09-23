@@ -1,6 +1,6 @@
 name: Update K8s
 
-run-name: Platform Release ${{ github.event.client_payload.data.application_version }}
+run-name: ${{ github.event.client_payload.data.application_key || 'bookverse-platform' }} ${{ github.event.client_payload.data.application_version }}
 
 concurrency:
   group: update-k8s-${{ vars.PROJECT_KEY || 'bookverse' }}
