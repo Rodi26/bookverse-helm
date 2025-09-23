@@ -53,7 +53,6 @@ jobs:
             if not stage and str(action).lower()=='release_completed':
               stage='PROD'
             
-            # Extract application_key for gate decision
             app_key = ''
             if isinstance(cp, dict) and 'data' in cp:
               data_payload = cp['data']
@@ -68,7 +67,6 @@ jobs:
               print(f"Debug: client_payload.data keys: {list(data_payload.keys()) if isinstance(data_payload, dict) else 'not dict'}")
               print(f"Debug: client_payload.data content: {data_payload if isinstance(data_payload, dict) else 'not dict'}")
             
-            # Gate: Only proceed for PROD stage AND bookverse-platform application
             should_skip = False
             skip_reason = ""
             
@@ -122,11 +120,10 @@ jobs:
         run: |
           echo "🔍 Extracting OIDC token from JFrog CLI step output..."
           
-          # Use the oidc-token output as specified
           OIDC_TOKEN="${{ steps.jfrog-cli-auth.outputs.oidc-token }}"
           if [[ -n "$OIDC_TOKEN" && "$OIDC_TOKEN" != "null" ]]; then
             echo "✅ Successfully retrieved OIDC token from JFrog CLI step output (oidc-token)"
-            echo "📋 Token length: ${#OIDC_TOKEN} characters"
+            echo "📋 Token length: ${
             echo "JF_OIDC_TOKEN=$OIDC_TOKEN" >> $GITHUB_ENV
           else
             echo "❌ OIDC token not available from JFrog CLI step output (oidc-token)"
@@ -220,8 +217,6 @@ jobs:
                   print(f"INFO: Ignoring invalid platform version from payload: {_v!r}")
                   version = ''
           if not version:
-              # If no version was extracted from event payload, fail rather than fallback
-              # This prevents deploying wrong versions when specific versions are requested
               print("❌ No platform version found in event payload")
               print("Event payload should contain:")
               print("- client_payload.data.application_version OR")  
@@ -245,12 +240,11 @@ jobs:
           set -euo pipefail
           echo "🔍 Fetching platform content for ${APPTRUST_APPLICATION}@${RESOLVED_PV}"
           
-          # Validate authentication token
           if [[ -z "${JF_OIDC_TOKEN:-}" ]]; then
             echo "❌ JF_OIDC_TOKEN is not set. OIDC token extraction step may have failed." >&2
             exit 1
           fi
-          echo "✅ JF_OIDC_TOKEN is available (length: ${#JF_OIDC_TOKEN} characters)"
+          echo "✅ JF_OIDC_TOKEN is available (length: ${
           
           URL="${JFROG_URL%/}/apptrust/api/v1/applications/${APPTRUST_APPLICATION}/versions/${RESOLVED_PV}/content?include=releasables,sources"
           echo "📡 API URL: $URL"
@@ -343,7 +337,6 @@ jobs:
             print(f"📋 Application versions found: {versions_by_app}")
             print(f"📋 Docker image tags found: {versions_by_service}")
 
-            # ONLY use application versions from platform bundle - NO FALLBACKS
             print("🔍 Available application versions from platform bundle:")
             for app_key, version in versions_by_app.items():
                 print(f"  {app_key}: {version}")
@@ -352,14 +345,11 @@ jobs:
             for svc_name, tag in versions_by_service.items():
                 print(f"  {svc_name}: {tag}")
             
-            # TEMPORARY: Due to platform application bugs, use docker image versions directly
-            # TODO: Revert to application versions from sources.versions when platform bugs are fixed
             print("⚠️  TEMPORARY: Using docker image versions due to platform application bugs")
             print("   - sources.versions not calculated correctly")
             print("   - SHA-based versions accepted as valid (semver check disabled)")
             print("   Both issues will be fixed in platform application")
             
-            # Map service names to application keys for validation
             service_to_app = {
                 'inventory': 'bookverse-inventory',
                 'recommendations': 'bookverse-recommendations', 
@@ -367,8 +357,6 @@ jobs:
                 'web': 'bookverse-web'
             }
             
-            # Validate that we have docker images for all required services
-            # TEMPORARY: Accept SHA-based versions as valid (another platform bug)
             required_services = ['inventory', 'recommendations', 'checkout', 'web']
             missing_services = []
             
@@ -384,7 +372,6 @@ jobs:
                 print(f"Platform bundle must contain docker image versions for all services.")
                 raise SystemExit("Platform bundle incomplete - missing docker image versions")
             
-            # Show version types for debugging
             print("📋 Docker image version types:")
             for svc in required_services:
                 version = versions_by_service[svc]
@@ -393,17 +380,14 @@ jobs:
             
             print("✅ All required docker image versions found in platform bundle")
             
-            # Pin using docker image versions (temporary workaround)
             print("🐳 DOCKER IMAGE PINNING RESULTS:")
             print("=" * 60)
             
             for app_key, values_key in app_to_values_key.items():
                 if values_key == 'recommendations':
-                    # Get versions for recommendations and worker
                     rec_version = versions_by_service.get('recommendations')
                     worker_version = versions_by_service.get('recommendations-worker', rec_version)
                     
-                    # Get the repository from existing values
                     rec_repo = ((y.get('recommendations') or {}).get('repository')) or f"apptrustswampupc.jfrog.io/{values_key}"
                     worker_repo = (((y.get('recommendations') or {}).get('worker') or {}).get('repository')) or f"apptrustswampupc.jfrog.io/{values_key}-worker"
                     
@@ -417,10 +401,8 @@ jobs:
                     print(f"   Source: Docker image version from platform bundle (worker-specific or shared)")
                     print(f"   Docker Image: {worker_repo}:{worker_version}")
                 else:
-                    # Get docker image version for this service
                     docker_version = versions_by_service[values_key]
                     
-                    # Get the repository from existing values
                     repo = ((y.get(values_key) or {}).get('repository')) or f"apptrustswampupc.jfrog.io/{values_key}"
                     
                     y.setdefault(values_key, {})['tag']=str(docker_version)
@@ -489,20 +471,18 @@ jobs:
           skip_reason = os.environ.get('SKIP_REASON', '')
 
           if skip:
-              # Generate summary for skipped process
               sections = []
-              sections.append("## K8s Update Process Skipped")
+              sections.append("
               sections.append("")
               sections.append("The Helm chart update process was skipped because:")
               sections.append(f"**{skip_reason}**")
               sections.append("")
-              sections.append("### Requirements for K8s updates:")
+              sections.append("
               sections.append("- Event must be a `repository_dispatch` with action `release_completed`")
               sections.append("- Stage must be `PROD`")
               sections.append("- Application key must be `bookverse-platform`")
               sections.append("")
               
-              # Show payload for debugging
               payload = {}
               ev_path=os.environ.get('GITHUB_EVENT_PATH')
               if ev_path and os.path.exists(ev_path):
@@ -518,13 +498,12 @@ jobs:
                       'stage': (data.get('stage') or cp.get('stage') or ev.get('stage') or '').upper()
                   }
               
-              sections.append("### Event payload received:")
+              sections.append("
               sections.append("```json")
               sections.append(json.dumps(payload, indent=2, ensure_ascii=False))
               sections.append("```")
               
           else:
-              # Generate summary for successful process
               def read_yaml(path):
                   try:
                       with open(path, 'r', encoding='utf-8') as f:
@@ -553,7 +532,6 @@ jobs:
                       'stage': (data.get('stage') or cp.get('stage') or ev.get('stage') or '').lower()
                   }
 
-              # Load platform components data
               try:
                   with open('platform_components.json','r',encoding='utf-8') as f:
                       raw = json.load(f)
@@ -561,7 +539,6 @@ jobs:
                   raw = {}
               comp = raw if isinstance(raw, dict) else {}
               
-              # Extract application versions from sources (release bundles)
               app_versions = {}
               sources = comp.get('sources', [])
               if isinstance(sources, list):
@@ -574,7 +551,6 @@ jobs:
                               if name and version:
                                   app_versions[name] = version
               
-              # Extract docker image tags from releasables
               docker_tags = {}
               releasables = comp.get('releasables', [])
               if isinstance(releasables, list):
@@ -597,19 +573,16 @@ jobs:
                   return ((doc.get(svc) or {}).get('tag')) or ''
 
               sections = []
-              sections.append("## K8s Update Completed")
+              sections.append("
               sections.append("")
               
-              # Platform version
               platform_version = comp.get('version', '')
               sections.append(f"**Platform Version:** `{platform_version}`")
               sections.append("")
               
-              # Show actual docker images that were pinned
-              sections.append("### Docker Images Pinned")
+              sections.append("
               sections.append("")
               
-              # Map application names to service names for display
               app_to_service = {
                   'bookverse-inventory': 'inventory',
                   'bookverse-recommendations': 'recommendations', 
@@ -617,12 +590,10 @@ jobs:
                   'bookverse-web': 'web'
               }
               
-              # Show the actual docker images from values.yaml
               for app_name in sorted(app_versions.keys()):
                   app_version = app_versions[app_name]
                   service_name = app_to_service.get(app_name, app_name)
                   
-                  # Get the actual repository and tag from values.yaml
                   if service_name == 'recommendations':
                       repo = (y.get('recommendations') or {}).get('repository', f'apptrustswampupc.jfrog.io/{service_name}')
                       tag = (y.get('recommendations') or {}).get('tag', 'unknown')
@@ -640,14 +611,14 @@ jobs:
                       sections.append(f"  - Source: Application version from platform bundle")
               
               sections.append("")
-              sections.append("### Helm Chart Values Applied")
+              sections.append("
               sections.append(f"- `platform.version`: `{(y.get('platform') or {}).get('version','')}`")
               for svc in ['web','inventory','recommendations','checkout','recommendations.worker']:
                   tag = get_tag(y, svc)
                   sections.append(f"- `{svc}.tag`: `{tag}`")
               
               sections.append("")
-              sections.append("### Event Payload")
+              sections.append("
               sections.append("```json")
               sections.append(json.dumps(payload, indent=2, ensure_ascii=False))
               sections.append("```")

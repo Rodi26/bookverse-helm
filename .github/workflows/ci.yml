@@ -128,7 +128,7 @@ jobs:
           OIDC_TOKEN="${{ steps.jfrog-cli-auth.outputs.oidc-token }}"
           if [[ -n "$OIDC_TOKEN" && "$OIDC_TOKEN" != "null" ]]; then
             echo "✅ Successfully retrieved OIDC token from JFrog CLI step output (oidc-token)"
-            echo "📋 Token length: ${#OIDC_TOKEN} characters"
+            echo "📋 Token length: ${
           else
             echo "❌ OIDC token not available from JFrog CLI step output (oidc-token)"
             exit 1
@@ -155,10 +155,8 @@ jobs:
           set -euo pipefail
           SERVICE_NAME=${SERVICE_NAME:-$(echo ${{ github.event.repository.name }} | sed 's/bookverse-//')}
           APPLICATION_KEY="bookverse-$SERVICE_NAME"
-          # Use OIDC token directly from JFrog CLI step output
           echo "🔍 Using OIDC token directly from JFrog CLI step output for semver determination..."
           
-          # Test if we can access the token directly without intermediate assignment
           OIDC_TOKEN="${{ steps.jfrog-cli-auth.outputs.oidc-token }}"
           if [[ -z "$OIDC_TOKEN" ]]; then
             echo "❌ OIDC token not available from JFrog CLI step" >&2
@@ -166,7 +164,7 @@ jobs:
           fi
           
           echo "✅ OIDC token available from JFrog CLI step"
-          echo "📋 Token length: ${#OIDC_TOKEN} characters"
+          echo "📋 Token length: ${
           echo "📋 Token starts with: ${OIDC_TOKEN:0:10}..."
           echo "📋 Using shared semver logic from bookverse-infra"
           INFRA_SCRIPTS_PATH="bookverse-infra/libraries/bookverse-devops/scripts"
@@ -277,7 +275,6 @@ jobs:
           jf rt bce --project "${{ vars.PROJECT_KEY }}" "$BUILD_NAME" "$BUILD_NUMBER"
           if BUILD_PUBLISH_RESULT=$(jf rt bp --project "${{ vars.PROJECT_KEY }}" "$BUILD_NAME" "$BUILD_NUMBER" 2>&1); then
             echo "BUILD_INFO_PUBLISH_STATUS=SUCCESS" >> $GITHUB_ENV
-            # Extract build UI URL from JFrog CLI output (captures both stdout and stderr)
             BUILD_UI_URL=$(echo "$BUILD_PUBLISH_RESULT" | grep -o 'Browse it in Artifactory under https://[^[:space:]]*' | sed 's/Browse it in Artifactory under //' | head -1 || echo "$BUILD_PUBLISH_RESULT" | grep -o '"buildInfoUiUrl": *"[^"]*"' | sed 's/.*"buildInfoUiUrl": *"\([^"]*\)".*/\1/' | head -1 || echo "")
             
             if [[ -n "$BUILD_UI_URL" ]]; then
@@ -366,7 +363,7 @@ jobs:
           PROMOTION_OIDC_TOKEN="${{ steps.jfrog-cli-auth.outputs.oidc-token }}"
           if [[ -n "$PROMOTION_OIDC_TOKEN" && "$PROMOTION_OIDC_TOKEN" != "null" ]]; then
             echo "✅ Successfully retrieved OIDC token from JFrog CLI step output (oidc-token)"
-            echo "📋 Token length: ${#PROMOTION_OIDC_TOKEN} characters"
+            echo "📋 Token length: ${
             echo "promotion_oidc_token=$PROMOTION_OIDC_TOKEN" >> $GITHUB_OUTPUT
             echo "JF_OIDC_TOKEN=$PROMOTION_OIDC_TOKEN" >> $GITHUB_ENV
           else
@@ -422,7 +419,7 @@ jobs:
           APP_KEY="$APPLICATION_KEY"
           
           TAG_OPTIONS=(release hotfix feature bugfix enhancement security performance refactor)
-          TAG_INDEX=$((${GITHUB_RUN_NUMBER:-0} % ${#TAG_OPTIONS[@]}))
+          TAG_INDEX=$((${GITHUB_RUN_NUMBER:-0} % ${
           APP_TAG="${TAG_OPTIONS[$TAG_INDEX]}"
           
           ACTUAL_BUILD_NAME="${{ needs.build-test-publish.outputs.build_name }}"
@@ -521,7 +518,6 @@ jobs:
           echo "⚠️  Evidence attachment to release bundle bookverse-helm:1.7.1 failing"
           echo "🔧 Check EVIDENCE_PRIVATE_KEY and EVIDENCE_KEY_ALIAS configuration"
           echo "✅ Skipping evidence step to allow CI completion"
-          # attach_application_unassigned_evidence
           
           echo "✅ Evidence step skipped (would attach: slsa-provenance, helm-chart-analysis)"
 
@@ -549,7 +545,6 @@ jobs:
           fi
           
           echo "🚧 DEV stage evidence temporarily disabled"
-          # attach_application_dev_evidence
           echo "✅ DEV stage evidence skipped (would attach: helm-deployment-tests)"
 
       - name: "[Promote & Evidence] QA Stage"
@@ -573,7 +568,6 @@ jobs:
           fi
           
           echo "🚧 QA stage evidence temporarily disabled"
-          # attach_application_qa_evidence
           echo "✅ QA stage evidence skipped (would attach: helm-security-scan, k8s-policy-validation)"
 
       - name: "[Promote & Evidence] STAGING Stage"
@@ -597,7 +591,6 @@ jobs:
             fi
           
           echo "🚧 STAGING stage evidence temporarily disabled"
-          # attach_application_staging_evidence
           echo "✅ STAGING stage evidence skipped (would attach: helm-chart-compliance, cluster-compatibility)"
 
       - name: "[Promote & Evidence] PROD Stage"
@@ -624,7 +617,6 @@ jobs:
           fi
 
           echo "🚧 PROD stage evidence temporarily disabled"
-          # attach_application_prod_evidence
           echo "✅ PROD stage evidence skipped (would attach: deployment-verification, production-readiness)"
           echo "🎉 SUCCESS: Application version $APP_VERSION promoted to PROD with all evidence attached!"
 
@@ -634,9 +626,9 @@ jobs:
           echo "📊 Generating comprehensive CI/CD pipeline summary for stakeholder visibility"
           echo "🎯 This summary provides complete build status, artifacts, and next steps"
           
-          echo "## 🎯 BookVerse Helm Service - CI/CD Summary" >> $GITHUB_STEP_SUMMARY
+          echo "
           echo "" >> $GITHUB_STEP_SUMMARY
-          echo "### 📋 Build Information" >> $GITHUB_STEP_SUMMARY
+          echo "
           echo "- **Service:** helm" >> $GITHUB_STEP_SUMMARY
           echo "- **Build Name:** $BUILD_NAME" >> $GITHUB_STEP_SUMMARY
           echo "- **Build Number:** $BUILD_NUMBER" >> $GITHUB_STEP_SUMMARY
@@ -645,7 +637,7 @@ jobs:
           echo "- **Branch:** ${{ github.ref_name }}" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           
-          echo "### ✅ AppTrust Compliance Status" >> $GITHUB_STEP_SUMMARY
+          echo "
           echo "- **Job 1 (analyze-commit):** ✅ Completed" >> $GITHUB_STEP_SUMMARY
           echo "- **Job 2 (build-test-publish):** ✅ Completed" >> $GITHUB_STEP_SUMMARY
           if [[ "${{ needs.analyze-commit.outputs.create_app_version }}" == "true" ]]; then
@@ -655,25 +647,25 @@ jobs:
           fi
           echo "" >> $GITHUB_STEP_SUMMARY
           
-          echo "### 📊 Artifacts & Evidence" >> $GITHUB_STEP_SUMMARY
+          echo "
           echo "- **Helm Charts:**" >> $GITHUB_STEP_SUMMARY
           echo "  - 📦 platform-chart: \`v${PLATFORM_CHART_VERSION:-'N/A'}\`" >> $GITHUB_STEP_SUMMARY
           echo "- **Evidence Artifacts:** ✅ Collected and uploaded" >> $GITHUB_STEP_SUMMARY
           echo "- **Build-Info:** ✅ Published with all artifacts" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           
-          echo "### 🚀 Optimizations Applied" >> $GITHUB_STEP_SUMMARY
+          echo "
           echo "- **bookverse-devops:** ✅ Evidence collection & patterns" >> $GITHUB_STEP_SUMMARY
           echo "- **Consolidated Environment:** ✅ Centralized JFrog setup" >> $GITHUB_STEP_SUMMARY
           echo "- **Enhanced Helm Testing:** ✅ Comprehensive chart validation" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           
           if [[ "${{ needs.analyze-commit.outputs.create_app_version }}" == "true" ]]; then
-            echo "### 🎯 Next Steps" >> $GITHUB_STEP_SUMMARY
+            echo "
             echo "Application version **${APP_VERSION:-'N/A'}** has been created and promoted through all stages." >> $GITHUB_STEP_SUMMARY
             echo "Use the **Promote** workflow for additional deployments or rollbacks." >> $GITHUB_STEP_SUMMARY
           else
-            echo "### 📦 Build-Info Only" >> $GITHUB_STEP_SUMMARY
+            echo "
             echo "This commit created build-info artifacts only (no application version)." >> $GITHUB_STEP_SUMMARY
             echo "Use manual workflow dispatch with \`force_app_version=true\` to create an application version." >> $GITHUB_STEP_SUMMARY
           fi
