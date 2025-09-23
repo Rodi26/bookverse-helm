@@ -40,7 +40,7 @@ recommendations:
   cache:
     ttlSeconds: 60
   worker:
-    enabled: true
+    enabled: false
     repository: apptrustswampupc.jfrog.io/bookverse-recommendations-internal-docker-release-local/recommendations-worker
     tag: 1.8.26
     replicas: 1
