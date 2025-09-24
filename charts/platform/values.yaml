@@ -1,7 +1,7 @@
 global:
   imageRegistry: apptrustswampupc.jfrog.io
 platform:
-  version: 2.1.19
+  version: 2.1.20
 platformWebhook: {}
 web:
   repository: apptrustswampupc.jfrog.io/bookverse-web-internal-docker-release-local/web
@@ -70,7 +70,7 @@ recommendations:
         '
 checkout:
   repository: apptrustswampupc.jfrog.io/bookverse-checkout-internal-docker-release-local/checkout
-  tag: 2.0.11
+  tag: 2.0.12
   replicas: 1
   port: 8000
   env:
