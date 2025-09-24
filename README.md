@@ -1,33 +1,75 @@
-# BookVerse Helm
+# BookVerse Helm Charts
 
-Platform-centric Helm charts for the BookVerse demo.
+Demo-ready Kubernetes deployment charts for the BookVerse platform, showcasing JFrog AppTrust capabilities with infrastructure-as-code patterns.
 
-## Charts
+## 🎯 Demo Purpose & Patterns
 
-- charts/platform: Deploys web and microservices used by the platform release
+This service demonstrates the **Infrastructure-as-Code Application Pattern** - showcasing how Kubernetes deployments, Helm charts, and infrastructure configurations can be managed in AppTrust.
 
-## CI
+### ⚙️ **Infrastructure-as-Code Application Pattern**
+- **What it demonstrates**: Application versions built from Helm charts, Kubernetes manifests, and deployment configurations
+- **AppTrust benefit**: Infrastructure deployments promoted together ensuring environment consistency across stages (DEV → QA → STAGING → PROD)
+- **Real-world applicability**: DevOps teams, infrastructure automation, and Kubernetes-native applications
 
-- `Helm CI` lints and packages the chart; upload to JFrog is a placeholder until connectivity is available.
-- `Update K8s` workflow listens to `repository_dispatch` (PROD) and pins versions in `charts/platform/values.yaml`, then lints and pushes commit.
+This service is **infrastructure-focused** - it demonstrates how infrastructure can be reliably versioned and promoted through enterprise deployment pipelines.
 
-### Update K8s Workflow
+## 🏗️ Helm Charts Architecture
 
-This repository contains a workflow at `.github/workflows/update-k8s.yml` that:
-
-- Listens to repository_dispatch events: `update_k8s`, `release_completed`, `platform_release_completed`, `release_complete`
-- Resolves the desired platform/app versions from the event payload or falls back to latest in AppTrust
-- Updates `charts/platform/values.yaml` (`platform.version` and service tags), lints the chart, and pushes the commit
-
-Manual trigger:
-
-1. Go to Actions → Update K8s → Run workflow
-2. Optionally provide `platform_version` input
-3. The workflow pins the version(s) and pushes the change, allowing Argo CD to auto-sync
-
-## Local packaging
-
-```bash
-helm lint charts/platform
-helm package charts/platform --destination dist
 ```
+┌─────────────────────────────────────────────────────────────┐
+│                  BookVerse Platform                         │
+├─────────────────────────────────────────────────────────────┤
+│                                                             │
+│                ┌─────────────────────────┐                  │
+│                │     Helm Charts         │                  │
+│                │                         │                  │
+│                │ Infrastructure-as-Code  │                  │
+│                │ ┌─────────────────────┐ │                  │
+│                │ │  Platform Charts    │ │                  │
+│                │ │  (Services, DBs)    │ │                  │
+│                │ └─────────────────────┘ │                  │
+│                │ ┌─────────────────────┐ │                  │
+│                │ │ Environment Config  │ │                  │
+│                │ │   (Values Files)    │ │                  │
+│                │ └─────────────────────┘ │                  │
+│                │ ┌─────────────────────┐ │                  │
+│                │ │ Kubernetes YAML     │ │                  │
+│                │ │    Manifests        │ │                  │
+│                │ └─────────────────────┘ │                  │
+│                └─────────────────────────┘                  │
+│                          │                                  │
+│          ┌───────────────┼───────────────┐                  │
+│          │               │               │                  │
+│          ▼               ▼               ▼                  │
+│    [DEV Cluster]   [QA Cluster]   [PROD Cluster]           │
+│                                                             │
+└─────────────────────────────────────────────────────────────┘
+
+AppTrust Promotion Pipeline:
+DEV → QA → STAGING → PROD
+ │     │       │        │
+ └─────┴───────┴────────┘
+   Helm Charts & Configs
+   Deploy to Each Environment
+```
+
+## 🔧 JFrog AppTrust Integration
+
+This service creates multiple artifacts per application version:
+
+1. **Helm Charts** - Packaged Kubernetes deployment charts
+2. **Kubernetes Manifests** - Raw YAML deployment files
+3. **Configuration Files** - Environment-specific values files
+4. **SBOMs** - Software Bill of Materials for infrastructure dependencies
+5. **Test Reports** - Infrastructure validation and deployment testing
+6. **Build Evidence** - Comprehensive infrastructure deployment attestations
+
+Each artifact moves together through the promotion pipeline: DEV → QA → STAGING → PROD.
+
+For the non-JFrog evidence plan and gates, see: `../bookverse-demo-init/docs/EVIDENCE_PLAN.md`.
+
+## 🔄 Workflows
+
+- [`ci.yml`](.github/workflows/ci.yml) — CI: chart validation, packaging, publish artifacts/build-info, AppTrust version and evidence
+- [`promote.yml`](.github/workflows/promote.yml) — Promote the helm app version through stages with evidence
+- [`promotion-rollback.yml`](.github/workflows/promotion-rollback.yml) — Roll back a promoted helm application version (demo utility)
