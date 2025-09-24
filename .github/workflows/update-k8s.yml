@@ -4,7 +4,7 @@ run-name: ${{ github.event.client_payload.data.application_key || 'bookverse-pla
 
 concurrency:
   group: update-k8s-${{ vars.PROJECT_KEY || 'bookverse' }}
-  cancel-in-progress: false
+  cancel-in-progress: ${{ github.event.client_payload.data.application_key == 'bookverse-platform' }}
 
 on:
   repository_dispatch:
@@ -635,5 +635,6 @@ jobs:
           else:
               print(text)
           PY
+
 
 
