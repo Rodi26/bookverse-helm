@@ -1,76 +1,76 @@
-# 📋 Index - Configuration GKE pour BookVerse
+# 📋 Index - GKE Configuration for BookVerse
 
-## 🎯 Objectif
+## 🎯 Purpose
 
-Ce répertoire contient une **configuration complète et isolée** pour déployer BookVerse sur **Google Kubernetes Engine (GKE)** avec accès externe via Load Balancer.
+This directory contains a **complete and isolated configuration** for deploying BookVerse on **Google Kubernetes Engine (GKE)** with external access via Load Balancer.
 
-## ✅ Garanties
+## ✅ Guarantees
 
-- ✅ **100% séparé** des fichiers Helm originaux
-- ✅ **Aucune modification** des configurations existantes (ArgoCD, Traefik, etc.)
-- ✅ **Clairement identifié** comme spécifique GKE
-- ✅ Basé sur votre **exemple Artifactory fonctionnel**
+- ✅ **100% separated** from original Helm files
+- ✅ **No modifications** to existing configurations (ArgoCD, Traefik, etc.)
+- ✅ **Clearly identified** as GKE-specific
+- ✅ Based on your **working Artifactory example**
 
-## 📂 Structure des Fichiers
+## 📂 File Structure
 
 ### 📖 Documentation
-| Fichier | Description |
-|---------|-------------|
-| `QUICKSTART.md` | ⚡ Démarrage rapide (5 minutes) |
-| `README-GKE.md` | 📘 Guide principal GKE |
-| `GKE_DEPLOYMENT.md` | 📚 Documentation détaillée |
-| `INDEX.md` | 📋 Ce fichier |
+| File | Description |
+|------|-------------|
+| `QUICKSTART.md` | ⚡ Quick start guide (5 minutes) |
+| `README-GKE.md` | 📘 Main GKE guide |
+| `GKE_DEPLOYMENT.md` | 📚 Detailed documentation |
+| `INDEX.md` | 📋 This file |
 
-### 🔧 Scripts de Déploiement
-| Fichier | Description |
-|---------|-------------|
-| `deploy-to-gke.sh` | 🚀 Script de déploiement automatisé complet |
-| `setup-gke-ingress.sh` | 🌐 Configuration IP statique et DNS |
-| `generate-docker-secret.sh` | 🔐 Génération des secrets JFrog |
+### 🔧 Deployment Scripts
+| File | Description |
+|------|-------------|
+| `deploy-to-gke.sh` | 🚀 Complete automated deployment script |
+| `setup-gke-ingress.sh` | 🌐 Static IP and DNS configuration |
+| `generate-docker-secret.sh` | 🔐 JFrog secret generation |
 
-### ⚙️ Configuration Helm
-| Fichier | Description |
-|---------|-------------|
-| `values-gke.yaml` | 🎛️ Values Helm optimisées pour GKE |
+### ⚙️ Helm Configuration
+| File | Description |
+|------|-------------|
+| `values-gke.yaml` | 🎛️ Helm values optimized for GKE |
 
-### 🎯 Manifests Kubernetes
-| Fichier | Description |
-|---------|-------------|
+### 🎯 Kubernetes Manifests
+| File | Description |
+|------|-------------|
 | `k8s-manifests/01-namespace.yaml` | Namespaces (dev/qa/staging/prod) |
-| `k8s-manifests/02-managed-certificate.yaml` | Certificats Google-Managed SSL |
-| `k8s-manifests/03-gke-ingress.yaml` | Ingress avec IP statique globale |
-| `k8s-manifests/04-image-pull-secret.yaml.template` | Template secrets JFrog |
+| `k8s-manifests/02-managed-certificate.yaml` | Google-Managed SSL certificates |
+| `k8s-manifests/03-gke-ingress.yaml` | Ingress with global static IP |
+| `k8s-manifests/04-image-pull-secret.yaml.template` | JFrog secrets template |
 
-## 🚀 Démarrage Ultra-Rapide
+## 🚀 Ultra-Quick Start
 
 ```bash
 cd /Users/rodolphefontaine/bookverse-demo/bookverse-helm/gke-deployment
 
-# Lire d'abord le guide
+# Read the guide first
 cat QUICKSTART.md
 
-# Puis exécuter
+# Then execute
 ./deploy-to-gke.sh
 ```
 
-## 🔑 Fonctionnalités GKE Natives
+## 🔑 GKE Native Features
 
-### IP Statique Globale
+### Global Static IP
 - Annotation: `kubernetes.io/ingress.global-static-ip-name: bookverse-web-ip`
-- Réservée via: `gcloud compute addresses create bookverse-web-ip --global`
+- Reserved via: `gcloud compute addresses create bookverse-web-ip --global`
 
-### Certificat SSL Automatique
+### Automatic SSL Certificate
 - Type: Google-Managed Certificate
-- Provisioning: Automatique après configuration DNS
-- Renouvellement: Automatique
+- Provisioning: Automatic after DNS configuration
+- Renewal: Automatic
 
-### Ingress GCE
-- IngressClass: `gce` (contrôleur Google Cloud Load Balancer)
+### GCE Ingress
+- IngressClass: `gce` (Google Cloud Load Balancer controller)
 - Backend: Google Cloud Load Balancer
-- Health Checks: Automatiques
+- Health Checks: Automatic
 
-### Similaire à Votre Artifactory
-Basé sur les annotations de votre déploiement Artifactory fonctionnel :
+### Similar to Your Artifactory
+Based on annotations from your working Artifactory deployment:
 ```yaml
 kubernetes.io/ingress.class: gce
 kubernetes.io/ingress.global-static-ip-name: bookverse-web-ip
@@ -79,45 +79,44 @@ ingress.kubernetes.io/proxy-read-timeout: "600"
 ingress.kubernetes.io/proxy-send-timeout: "600"
 ```
 
-## 📊 Comparaison avec Autres Configurations
+## 📊 Comparison with Other Configurations
 
-| Configuration | Localisation | Usage |
-|---------------|--------------|-------|
-| **ArgoCD GitOps** | `bookverse-demo-assets/gitops/` | Déploiement GitOps classique |
-| **Helm Standard** | `bookverse-helm/charts/platform/` | Déploiement Helm générique |
-| **GKE Optimisé** | `bookverse-helm/gke-deployment/` ← **ICI** | **GKE avec IP statique et certificat Google** |
+| Configuration | Location | Usage |
+|---------------|----------|-------|
+| **ArgoCD GitOps** | `bookverse-demo-assets/gitops/` | Standard GitOps deployment |
+| **Helm Standard** | `bookverse-helm/charts/platform/` | Generic Helm deployment |
+| **GKE Optimized** | `bookverse-helm/gke-deployment/` ← **HERE** | **GKE with static IP and Google certificate** |
 
-## 🎯 Différences Clés GKE
+## 🎯 Key GKE Differences
 
-| Fonctionnalité | Standard | GKE (Ce Répertoire) |
-|----------------|----------|---------------------|
+| Feature | Standard | GKE (This Directory) |
+|---------|----------|----------------------|
 | IngressClass | `traefik` | `gce` |
-| IP | Dynamique | **Statique globale** |
-| Certificat | Let's Encrypt / Manuel | **Google-Managed (auto)** |
+| IP | Dynamic | **Global static** |
+| Certificate | Let's Encrypt / Manual | **Google-Managed (auto)** |
 | Load Balancer | Traefik / Nginx | **Google Cloud LB** |
-| DNS | Configuration manuelle | **Intégré avec Cloud DNS** |
+| DNS | Manual configuration | **Integrated with Cloud DNS** |
 
-## 🔐 Sécurité
+## 🔐 Security
 
-- Certificats SSL automatiques via Google
-- Secrets Kubernetes pour JFrog registry
-- Network Policies (optionnel, voir docs)
+- Automatic SSL certificates via Google
+- Kubernetes secrets for JFrog registry
+- Network Policies (optional, see docs)
 
-## 🌍 Accès Externe
+## 🌍 External Access
 
-Après déploiement complet:
+After complete deployment:
 - 🌐 **URL**: https://bookverse.rodolphef.org
-- 🔒 **HTTPS**: Automatique (certificat Google)
-- 🌎 **IP**: Statique et globale
+- 🔒 **HTTPS**: Automatic (Google certificate)
+- 🌎 **IP**: Static and global
 - ⚡ **Performance**: Google Cloud Load Balancer
 
-## 📚 Pour en Savoir Plus
+## 📚 Learn More
 
-1. **Démarrage rapide**: `QUICKSTART.md`
-2. **Guide complet**: `README-GKE.md`
-3. **Documentation technique**: `GKE_DEPLOYMENT.md`
+1. **Quick start**: `QUICKSTART.md`
+2. **Complete guide**: `README-GKE.md`
+3. **Technical documentation**: `GKE_DEPLOYMENT.md`
 
 ---
 
-**Note**: Cette configuration est maintenue séparément et ne modifie AUCUN fichier existant.
-
+**Note**: This configuration is maintained separately and does NOT modify ANY existing files.

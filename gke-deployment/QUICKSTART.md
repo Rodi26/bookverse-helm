@@ -1,47 +1,47 @@
-# ⚡ BookVerse GKE - Démarrage Rapide
+# ⚡ BookVerse GKE - Quick Start
 
-Configuration **spécialement conçue pour GKE** - complètement séparée des autres configurations.
+Configuration **specifically designed for GKE** - completely separated from other configurations.
 
-## 🎯 Déploiement en 5 Minutes
+## 🎯 Deploy in 5 Minutes
 
-### 1️⃣ Réserver l'IP Statique
+### 1️⃣ Reserve Static IP
 
 ```bash
 cd /Users/rodolphefontaine/bookverse-demo/bookverse-helm/gke-deployment
 
-export PROJECT_ID="votre-project-gcp"
+export PROJECT_ID="your-gcp-project"
 
 gcloud compute addresses create bookverse-web-ip --global --project=$PROJECT_ID
 STATIC_IP=$(gcloud compute addresses describe bookverse-web-ip --global --format="value(address)")
 
-echo "✅ IP Statique: $STATIC_IP"
+echo "✅ Static IP: $STATIC_IP"
 ```
 
-### 2️⃣ Configurer DNS
+### 2️⃣ Configure DNS
 
-**Créer un enregistrement A:**
-- Nom: `bookverse.rodolphef.org`
+**Create an A record:**
+- Name: `bookverse.rodolphef.org`
 - Type: A
-- Valeur: `$STATIC_IP`
+- Value: `$STATIC_IP`
 - TTL: 300
 
-### 3️⃣ Créer les Ressources Kubernetes
+### 3️⃣ Create Kubernetes Resources
 
 ```bash
 # Namespaces
 kubectl apply -f k8s-manifests/01-namespace.yaml
 
-# Certificat Google-Managed
+# Google-Managed Certificate
 kubectl apply -f k8s-manifests/02-managed-certificate.yaml
 
-# Secrets JFrog
+# JFrog Secrets
 ./generate-docker-secret.sh
-# Suivre les instructions affichées
+# Follow the displayed instructions
 ```
 
-### 4️⃣ Déployer BookVerse
+### 4️⃣ Deploy BookVerse
 
-**Option A: Script Automatisé (Recommandé)**
+**Option A: Automated Script (Recommended)**
 ```bash
 export NAMESPACE=bookverse-prod
 export DOMAIN=bookverse.rodolphef.org
@@ -50,7 +50,7 @@ export JFROG_REGISTRY=rodolphefplus.jfrog.io
 ./deploy-to-gke.sh
 ```
 
-**Option B: Déploiement Manuel**
+**Option B: Manual Deployment**
 ```bash
 cd /Users/rodolphefontaine/bookverse-demo/bookverse-helm
 
@@ -59,44 +59,44 @@ helm upgrade --install bookverse-platform ./charts/platform \
   --values gke-deployment/values-gke.yaml
 ```
 
-### 5️⃣ Appliquer l'Ingress
+### 5️⃣ Apply Ingress
 
 ```bash
 kubectl apply -f k8s-manifests/03-gke-ingress.yaml
 ```
 
-## ⏱️ Temps d'Attente
+## ⏱️ Wait Times
 
-- **Déploiement initial**: 2-5 minutes
-- **Certificat SSL**: 15-60 minutes (provisioning Google)
-- **Propagation DNS**: 5 minutes à quelques heures
+- **Initial deployment**: 2-5 minutes
+- **SSL Certificate**: 15-60 minutes (Google provisioning)
+- **DNS Propagation**: 5 minutes to several hours
 
-## ✅ Vérification
+## ✅ Verification
 
 ```bash
-# Tout en un
+# All-in-one check
 kubectl get all,ingress,managedcertificate -n bookverse-prod
 ```
 
-## 🌐 Accès
+## 🌐 Access
 
-Une fois le certificat actif (ACTIVE):
+Once certificate is active (ACTIVE status):
 ```
 https://bookverse.rodolphef.org
 ```
 
-## 📁 Fichiers GKE (Tous Séparés)
+## 📁 GKE Files (All Separated)
 
 ```
-gke-deployment/                    ← Dossier GKE isolé
-├── README-GKE.md                  ← Guide principal GKE
-├── QUICKSTART.md                  ← Ce fichier
-├── GKE_DEPLOYMENT.md              ← Documentation détaillée
-├── values-gke.yaml                ← Values Helm GKE
-├── setup-gke-ingress.sh          ← Setup IP statique
-├── deploy-to-gke.sh              ← Déploiement automatisé
-├── generate-docker-secret.sh     ← Générer secrets JFrog
-└── k8s-manifests/                ← Manifests K8s GKE
+gke-deployment/                    ← Isolated GKE folder
+├── README-GKE.md                  ← Main GKE guide
+├── QUICKSTART.md                  ← This file
+├── GKE_DEPLOYMENT.md              ← Detailed documentation
+├── values-gke.yaml                ← Helm values for GKE
+├── setup-gke-ingress.sh          ← Static IP setup
+├── deploy-to-gke.sh              ← Automated deployment
+├── generate-docker-secret.sh     ← Generate JFrog secrets
+└── k8s-manifests/                ← K8s manifests for GKE
     ├── 01-namespace.yaml
     ├── 02-managed-certificate.yaml
     ├── 03-gke-ingress.yaml
@@ -105,12 +105,11 @@ gke-deployment/                    ← Dossier GKE isolé
 
 ## ⚠️ Important
 
-✅ **Aucun fichier original modifié**
-✅ **Configuration GKE 100% séparée**
-✅ **Peut coexister avec ArgoCD/Traefik**
-✅ **Basée sur votre exemple Artifactory fonctionnel**
+✅ **No original files modified**
+✅ **100% separated GKE configuration**
+✅ **Can coexist with ArgoCD/Traefik**
+✅ **Based on your working Artifactory example**
 
 ## 🆘 Support
 
-Consultez `README-GKE.md` ou `GKE_DEPLOYMENT.md` pour plus de détails.
-
+See `README-GKE.md` or `GKE_DEPLOYMENT.md` for more details.

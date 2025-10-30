@@ -11,7 +11,6 @@ gke-deployment/
 ├── GKE_DEPLOYMENT.md                  # Detailed documentation
 ├── setup-gke-ingress.sh              # Static IP configuration script
 ├── deploy-to-gke.sh                  # Automated deployment script
-├── generate-docker-secret.sh          # JFrog secret generator
 └── k8s-manifests/                    # Kubernetes manifests for GKE
     ├── 01-namespace.yaml             # Namespaces (dev/qa/staging/prod)
     ├── 02-managed-certificate.yaml   # Google-managed certificates
@@ -82,12 +81,13 @@ kubectl apply -f k8s-manifests/01-namespace.yaml
 
 ### Step 4: Configure JFrog Secrets
 
-**Option A: Quick creation via kubectl**
 ```bash
+# JFrog variables
 export JFROG_REGISTRY="rodolphefplus.jfrog.io"
 export JFROG_USER="your-username"
 export JFROG_TOKEN="your-token"
 
+# Create secret for each namespace
 for NS in bookverse-dev bookverse-qa bookverse-staging bookverse-prod; do
   kubectl create secret docker-registry jfrog-docker-pull \
     --docker-server=$JFROG_REGISTRY \
@@ -97,10 +97,31 @@ for NS in bookverse-dev bookverse-qa bookverse-staging bookverse-prod; do
 done
 ```
 
-**Option B: Use the generator script**
+**OR generate the file manually:**
+
 ```bash
-./generate-docker-secret.sh
-# Follow the prompts
+# Generate base64-encoded Docker config
+cat > /tmp/.dockerconfigjson << EOF
+{
+  "auths": {
+    "$JFROG_REGISTRY": {
+      "auth": "$(printf "%s:%s" "$JFROG_USER" "$JFROG_TOKEN" | base64)"
+    }
+  }
+}
+EOF
+
+# Encode to base64
+BASE64_CONFIG=$(base64 -w 0 /tmp/.dockerconfigjson)  # Linux
+# BASE64_CONFIG=$(base64 -i /tmp/.dockerconfigjson)  # macOS
+
+# Replace PLACEHOLDER in 04-image-pull-secret.yaml.template
+sed "s/PLACEHOLDER_BASE64_DOCKERCONFIG/$BASE64_CONFIG/g" \
+  k8s-manifests/04-image-pull-secret.yaml.template > \
+  k8s-manifests/04-image-pull-secret.yaml
+
+# Apply
+kubectl apply -f k8s-manifests/04-image-pull-secret.yaml
 ```
 
 ### Step 5: Create Google-Managed Certificates
@@ -111,27 +132,25 @@ kubectl apply -f k8s-manifests/02-managed-certificate.yaml
 
 ⚠️ **Important**: Certificate provisioning takes **15-60 minutes** after DNS configuration.
 
-Monitor status:
+Check status:
 ```bash
 kubectl describe managedcertificate bookverse-web-cert-prod -n bookverse-prod
 ```
 
 ### Step 6: Deploy BookVerse with Helm
 
-**Option A: Automated deployment (Recommended)**
-```bash
-./deploy-to-gke.sh
-```
-
-**Option B: Manual Helm deployment**
 ```bash
 cd /Users/rodolphefontaine/bookverse-demo/bookverse-helm
 
-helm upgrade --install bookverse-platform ./charts/platform \
+# Production deployment
+helm upgrade --install bookverse-platform ../charts/platform \
   --namespace bookverse-prod \
-  --values gke-deployment/values-gke.yaml \
+  --values values-gke.yaml \
   --create-namespace \
   --wait
+
+# OR use automated script
+./deploy-to-gke.sh
 ```
 
 ### Step 7: Apply GKE Ingress
@@ -143,19 +162,16 @@ kubectl apply -f k8s-manifests/03-gke-ingress.yaml
 ### Step 8: Verify Deployment
 
 ```bash
-# Check all resources
-kubectl get all,ingress,managedcertificate -n bookverse-prod
+# Check ingress
+kubectl get ingress -n bookverse-prod
 
-# Check ingress status
-kubectl get ingress bookverse-web-ingress -n bookverse-prod
-
-# Check certificate status
+# Check certificate
 kubectl get managedcertificate -n bookverse-prod
 
 # Check pods
 kubectl get pods -n bookverse-prod
 
-# Get external IP
+# Check external IP
 kubectl get ingress bookverse-web-ingress -n bookverse-prod \
   -o jsonpath='{.status.loadBalancer.ingress[0].ip}'
 ```
@@ -164,19 +180,19 @@ kubectl get ingress bookverse-web-ingress -n bookverse-prod \
 
 Based on your working Artifactory example:
 
-### Global Static IP
+### IP Statique Globale
 ```yaml
 annotations:
   kubernetes.io/ingress.global-static-ip-name: bookverse-web-ip
 ```
 
-### GCE Ingress Class
+### Ingress Class GCE
 ```yaml
 spec:
   ingressClassName: gce
 ```
 
-### Google-Managed Certificate
+### Certificat Google-Managed
 ```yaml
 annotations:
   networking.gke.io/managed-certificates: bookverse-web-cert-prod
@@ -190,7 +206,7 @@ annotations:
   ingress.kubernetes.io/proxy-send-timeout: "600"
 ```
 
-## 🎯 GKE Architecture
+## 🎯 Architecture GKE
 
 ```
 Internet
@@ -198,8 +214,8 @@ Internet
 DNS: bookverse.rodolphef.org → STATIC_IP
    ↓
 Google Cloud Load Balancer (Global)
-   ├─ Static IP: bookverse-web-ip
-   ├─ SSL Certificate: Google-Managed
+   ├─ IP Statique: bookverse-web-ip
+   ├─ Certificat SSL: Google-Managed
    └─ Backend: GKE Ingress Controller
        ↓
    GKE Cluster (bookverse-prod namespace)
@@ -211,152 +227,148 @@ Google Cloud Load Balancer (Global)
 
 ## 🔧 Configuration Variables
 
-Customize in `values-gke.yaml`:
+Personnalisez dans `values-gke.yaml`:
 
 ```yaml
 web:
   ingress:
-    host: bookverse.rodolphef.org  # Your domain
+    host: bookverse.rodolphef.org  # Votre domaine
     annotations:
-      kubernetes.io/ingress.global-static-ip-name: bookverse-web-ip  # Your static IP name
+      kubernetes.io/ingress.global-static-ip-name: bookverse-web-ip  # Votre IP
 ```
 
-## 📊 Deployment Monitoring
+## 📊 Monitoring du Déploiement
 
 ```bash
-# Monitor pods
+# Surveiller les pods
 kubectl get pods -n bookverse-prod -w
 
-# Monitor ingress
+# Surveiller l'ingress
 kubectl get ingress -n bookverse-prod -w
 
-# Monitor certificate (wait for ACTIVE status)
+# Surveiller le certificat (attend ACTIVE)
 watch -n 10 "kubectl get managedcertificate -n bookverse-prod"
 
-# View service logs
+# Logs d'un service
 kubectl logs -n bookverse-prod -l app=platform-web --tail=50 -f
 ```
 
-## ✅ Post-Deployment Verification
+## ✅ Vérification Post-Déploiement
 
 ```bash
-# Test HTTP access (will redirect to HTTPS)
+# Test HTTP (sera redirigé vers HTTPS)
 curl -I http://bookverse.rodolphef.org
 
-# Test HTTPS access (once certificate is active)
+# Test HTTPS (une fois le certificat actif)
 curl -I https://bookverse.rodolphef.org
 
-# Open in browser
+# Test dans le navigateur
 open https://bookverse.rodolphef.org
 ```
 
-## 🐛 Troubleshooting
+## 🐛 Dépannage
 
-### Ingress Not Getting External IP
+### Ingress n'obtient pas d'IP externe
 
 ```bash
-# Check ingress events
+# Vérifier les événements
 kubectl describe ingress bookverse-web-ingress -n bookverse-prod
 
-# Check backends
+# Vérifier les backends
 kubectl get backendconfig -n bookverse-prod
 
-# Check services
+# Vérifier les services
 kubectl get svc -n bookverse-prod
 ```
 
-### Certificate Stuck in PROVISIONING
+### Certificat bloqué en PROVISIONING
 
-**Common causes:**
-- DNS not configured or not propagated
-- Domain not pointing to correct IP
-- Port 80/443 not accessible
+**Causes communes:**
+- DNS non configuré ou non propagé
+- Domaine ne pointe pas vers la bonne IP
+- Port 80/443 non accessible
 
 **Solutions:**
 ```bash
-# Check certificate status
+# Vérifier le statut du certificat
 kubectl describe managedcertificate bookverse-web-cert-prod -n bookverse-prod
 
-# Verify DNS
+# Vérifier DNS
 nslookup bookverse.rodolphef.org
 dig bookverse.rodolphef.org
 
-# Wait for DNS propagation (can take several hours)
+# Attendre la propagation DNS (peut prendre plusieurs heures)
 ```
 
-### 502/503 Errors
+### Erreurs 502/503
 
 ```bash
-# Check pod health
+# Vérifier la santé des pods
 kubectl get pods -n bookverse-prod
 kubectl logs -n bookverse-prod <pod-name>
 
-# Check endpoints
+# Vérifier les endpoints
 kubectl get endpoints -n bookverse-prod
 
-# Check health checks
+# Vérifier les health checks
 kubectl describe pod -n bookverse-prod <pod-name>
 ```
 
-## 🔄 Updates
+## 🔄 Mise à Jour
 
-To update the deployment:
+Pour mettre à jour le déploiement:
 
 ```bash
-# Update an image
+# Mettre à jour une image
 helm upgrade bookverse-platform ../charts/platform \
   --namespace bookverse-prod \
   --values values-gke.yaml \
   --set web.tag=NEW_VERSION \
   --reuse-values
 
-# Or redeploy completely
+# Ou redéployer complètement
 ./deploy-to-gke.sh
 ```
 
-## 🗑️ Cleanup
+## 🗑️ Nettoyage
 
-To completely remove BookVerse:
+Pour supprimer complètement BookVerse:
 
 ```bash
-# Delete Helm release
+# Supprimer le Helm release
 helm uninstall bookverse-platform -n bookverse-prod
 
-# Delete Kubernetes resources
+# Supprimer les ressources Kubernetes
 kubectl delete -f k8s-manifests/03-gke-ingress.yaml
 kubectl delete -f k8s-manifests/02-managed-certificate.yaml
 kubectl delete namespace bookverse-prod
 
-# Delete static IP (optional)
+# Supprimer l'IP statique (optionnel)
 gcloud compute addresses delete bookverse-web-ip --global
 ```
 
-## 💰 Cost Optimization
+## 💰 Optimisation des Coûts
 
-1. **Regional Static IP** (cheaper than global):
+1. **IP Statique Régionale** (moins chère que globale):
    ```bash
    gcloud compute addresses create bookverse-web-ip \
-     --region=us-central1  # instead of --global
+     --region=us-central1  # au lieu de --global
    ```
 
-2. **Autoscaling**: Configured in values-gke.yaml
-3. **Preemptible Nodes**: For non-production environments
+2. **Autoscaling**: Configuré dans values-gke.yaml
+3. **Preemptible Nodes**: Pour environnements non-prod
 
-## 📚 References
+## 📚 Références
 
-- [GKE Ingress Documentation](https://cloud.google.com/kubernetes-engine/docs/concepts/ingress)
+- [GKE Ingress](https://cloud.google.com/kubernetes-engine/docs/concepts/ingress)
 - [Google-Managed Certificates](https://cloud.google.com/kubernetes-engine/docs/how-to/managed-certs)
-- [Static IP Addresses](https://cloud.google.com/compute/docs/ip-addresses/reserve-static-external-ip-address)
-- Your working Artifactory example (used as reference)
+- [Static IP](https://cloud.google.com/compute/docs/ip-addresses/reserve-static-external-ip-address)
+- Votre exemple Artifactory fonctionnel (utilisé comme référence)
 
-## ⚠️ Important Notes
+## ⚠️ Notes Importantes
 
-- ✅ This configuration is **isolated** from existing Helm files
-- ✅ Does **not overwrite** any original files
-- ✅ Clearly identified as **GKE-specific**
-- ✅ Can coexist with other configurations (ArgoCD, Traefik, etc.)
-
-## 🆘 Support
-
-See `QUICKSTART.md` or `GKE_DEPLOYMENT.md` for more details.
+- ✅ Cette configuration est **isolée** des fichiers Helm existants
+- ✅ N'écrase **aucun** fichier original
+- ✅ Clairement identifiée comme **spécifique GKE**
+- ✅ Peut coexister avec d'autres configurations (ArgoCD, Traefik, etc.)
 
