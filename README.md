@@ -68,24 +68,6 @@ Each artifact moves together through the promotion pipeline: DEV → QA → STAG
 
 For the non-JFrog evidence plan and gates, see: `../bookverse-demo-init/docs/EVIDENCE_PLAN.md`.
 
-## 🌐 Deployment Options
-
-### Standard Deployment (GitOps/ArgoCD)
-- Location: `charts/platform/` (Helm charts)
-- Documentation: `README.md` (ce fichier)
-- Usage: ArgoCD, Traefik, déploiements génériques
-
-### **🆕 GKE-Specific Deployment** 
-- **Location**: [`gke-deployment/`](./gke-deployment/) ← **Configuration isolée pour GKE**
-- **Documentation**: [`gke-deployment/README-GKE.md`](./gke-deployment/README-GKE.md)
-- **Quickstart**: [`gke-deployment/QUICKSTART.md`](./gke-deployment/QUICKSTART.md)
-- **Features**: 
-  - ✅ IP statique globale Google Cloud
-  - ✅ Certificat SSL Google-Managed (automatique)
-  - ✅ Ingress GCE (Load Balancer Google)
-  - ✅ Accès externe avec domaine personnalisé
-  - ✅ 100% séparé des configurations existantes
-
 ## 🔄 Workflows
 
 - [`ci.yml`](.github/workflows/ci.yml) — CI: chart validation, packaging, publish artifacts/build-info, AppTrust version and evidence
