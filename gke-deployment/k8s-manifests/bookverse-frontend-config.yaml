@@ -1,0 +1,11 @@
+# FrontendConfig for HTTPS redirect
+apiVersion: networking.gke.io/v1beta1
+kind: FrontendConfig
+metadata:
+  name: bookverse-frontend-config
+  namespace: bookverse-prod
+spec:
+  redirectToHttps:
+    enabled: true
+    responseCodeName: "MOVED_PERMANENTLY_DEFAULT"
+

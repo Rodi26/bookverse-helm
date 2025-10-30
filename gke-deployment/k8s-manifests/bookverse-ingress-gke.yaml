@@ -1,0 +1,81 @@
+# BookVerse GKE Ingress with Global Static IP
+# Based on working ArgoCD and Artifactory examples
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: bookverse-ingress
+  namespace: bookverse-prod
+  annotations:
+    # GKE-specific annotations
+    kubernetes.io/ingress.class: gce
+    kubernetes.io/ingress.global-static-ip-name: bookverse-web-ip
+    
+    # Google-managed certificate
+    networking.gke.io/managed-certificates: bookverse-cert-prod
+    
+    # Proxy settings
+    ingress.kubernetes.io/proxy-body-size: "0"
+    ingress.kubernetes.io/proxy-read-timeout: "600"
+    ingress.kubernetes.io/proxy-send-timeout: "600"
+    
+    # Force HTTPS redirect (once certificate is active)
+    networking.gke.io/v1beta1.FrontendConfig: bookverse-frontend-config
+  
+  labels:
+    app: bookverse
+    environment: prod
+    traffic-type: external
+
+spec:
+  ingressClassName: gce
+  
+  # Routing rules
+  rules:
+    - host: bookverse.rodolphef.org
+      http:
+        paths:
+          # Inventory API
+          - path: /api/v1/books
+            pathType: Prefix
+            backend:
+              service:
+                name: inventory
+                port:
+                  number: 80
+          
+          # Static assets from inventory
+          - path: /static
+            pathType: Prefix
+            backend:
+              service:
+                name: inventory
+                port:
+                  number: 80
+          
+          # Recommendations service
+          - path: /recommendations
+            pathType: Prefix
+            backend:
+              service:
+                name: recommendations
+                port:
+                  number: 80
+          
+          # Checkout service
+          - path: /checkout
+            pathType: Prefix
+            backend:
+              service:
+                name: checkout
+                port:
+                  number: 80
+          
+          # Web frontend (default route)
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: platform-web
+                port:
+                  number: 80
+

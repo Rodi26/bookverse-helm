@@ -1,0 +1,13 @@
+# Google-Managed SSL Certificate for BookVerse
+apiVersion: networking.gke.io/v1
+kind: ManagedCertificate
+metadata:
+  name: bookverse-cert-prod
+  namespace: bookverse-prod
+  labels:
+    app: bookverse
+    environment: prod
+spec:
+  domains:
+    - bookverse.rodolphef.org
+
