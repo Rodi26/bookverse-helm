@@ -1,0 +1,138 @@
+# BookVerse Platform - GKE Production Configuration
+# =================================================
+# This values file is optimized for Google Kubernetes Engine (GKE)
+# with external access via Google Cloud Load Balancer
+
+# Web Frontend Configuration
+web:
+  repository: rodolphefplus.jfrog.io/bookverse-web-docker-release-local/web
+  tag: latest
+  replicas: 2
+  
+  env:
+    BOOKVERSE_ENV: PROD
+    PLATFORM_BASE_URL: ''
+    INVENTORY_BASE_URL: ''
+    RECOMMENDATIONS_BASE_URL: /recommendations
+    CHECKOUT_BASE_URL: /checkout
+  
+  # GKE Ingress Configuration with Static IP
+  ingress:
+    enabled: true
+    className: gce
+    host: bookverse.rodolphef.org
+    
+    annotations:
+      # GKE-specific annotations
+      kubernetes.io/ingress.class: gce
+      kubernetes.io/ingress.global-static-ip-name: bookverse-web-ip
+      
+      # Proxy settings for large requests/long connections
+      ingress.kubernetes.io/proxy-body-size: "0"
+      ingress.kubernetes.io/proxy-read-timeout: "600"
+      ingress.kubernetes.io/proxy-send-timeout: "600"
+      
+      # Google-managed certificate (automatic HTTPS)
+      networking.gke.io/managed-certificates: bookverse-web-cert
+      
+      # OR use cert-manager for Let's Encrypt (comment out managed-certificates above):
+      # cert-manager.io/cluster-issuer: letsencrypt-prod
+    
+    tls:
+      enabled: true
+      secretName: bookverse-web-tls
+    
+    # Google Managed Certificate configuration
+    managedCertificate:
+      enabled: true
+      name: bookverse-web-cert
+      additionalDomains: []  # Add more domains if needed
+  
+  service:
+    type: ClusterIP  # ClusterIP for Ingress, NodePort or LoadBalancer if needed
+    port: 80
+
+# Microservices Configuration
+inventory:
+  repository: rodolphefplus.jfrog.io/bookverse-inventory-docker-release-local/inventory
+  tag: latest
+  replicas: 2
+
+recommendations:
+  repository: rodolphefplus.jfrog.io/bookverse-recommendations-docker-release-local/recommendations
+  tag: latest
+  replicas: 2
+  
+  worker:
+    enabled: true
+    repository: rodolphefplus.jfrog.io/bookverse-recommendations-docker-release-local/recommendations-worker
+    tag: latest
+    replicas: 1
+  
+  config:
+    enabled: true
+    mountPath: /app/config
+    data:
+      recommendations-settings.yaml: |
+        weights:
+          genre: 1.0
+          author: 0.25
+          popularity: 0.1
+        max_recommendations: 5
+        min_score: 0.3
+  
+  resources:
+    enabled: true
+    mountPath: /app/resources
+    data:
+      stopwords.txt: |
+        the
+        a
+        an
+        and
+        or
+        but
+
+checkout:
+  repository: rodolphefplus.jfrog.io/bookverse-checkout-docker-release-local/checkout
+  tag: latest
+  replicas: 2
+
+# GKE-specific resource limits (adjust based on your cluster)
+resources:
+  web:
+    requests:
+      cpu: 100m
+      memory: 128Mi
+    limits:
+      cpu: 500m
+      memory: 512Mi
+  
+  inventory:
+    requests:
+      cpu: 200m
+      memory: 256Mi
+    limits:
+      cpu: 1000m
+      memory: 1Gi
+  
+  recommendations:
+    requests:
+      cpu: 200m
+      memory: 256Mi
+    limits:
+      cpu: 1000m
+      memory: 1Gi
+  
+  checkout:
+    requests:
+      cpu: 200m
+      memory: 256Mi
+    limits:
+      cpu: 1000m
+      memory: 1Gi
+
+# Image Pull Secrets for JFrog
+imagePullSecrets:
+  - name: jfrog-docker-pull
+
