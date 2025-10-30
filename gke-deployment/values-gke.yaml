@@ -5,7 +5,7 @@
 
 # Web Frontend Configuration
 web:
-  repository: rodolphefplus.jfrog.io/bookverse-web-docker-release-local/web
+  repository: rodolphefplus.jfrog.io/bookverse-web-internal-docker-nonprod-local/web
   tag: latest
   replicas: 2
   
@@ -54,18 +54,18 @@ web:
 
 # Microservices Configuration
 inventory:
-  repository: rodolphefplus.jfrog.io/bookverse-inventory-docker-release-local/inventory
+  repository: rodolphefplus.jfrog.io/bookverse-inventory-internal-docker-nonprod-local/inventory
   tag: latest
   replicas: 2
 
 recommendations:
-  repository: rodolphefplus.jfrog.io/bookverse-recommendations-docker-release-local/recommendations
+  repository: rodolphefplus.jfrog.io/bookverse-recommendations-internal-docker-nonprod-local/recommendations
   tag: latest
   replicas: 2
   
   worker:
     enabled: true
-    repository: rodolphefplus.jfrog.io/bookverse-recommendations-docker-release-local/recommendations-worker
+    repository: rodolphefplus.jfrog.io/bookverse-recommendations-internal-docker-nonprod-local/recommendations-worker
     tag: latest
     replicas: 1
   
@@ -94,7 +94,7 @@ recommendations:
         but
 
 checkout:
-  repository: rodolphefplus.jfrog.io/bookverse-checkout-docker-release-local/checkout
+  repository: rodolphefplus.jfrog.io/bookverse-checkout-internal-docker-nonprod-local/checkout
   tag: latest
   replicas: 2
 
